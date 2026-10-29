@@ -43,7 +43,14 @@ class GuardPersistenceInstrumentedTest {
     @Test fun homeLaunchesWithoutAutomaticallyProtecting() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         runBlocking { GuardStore(context).update { GuardDocument() } }
-        ActivityScenario.launch<SnowLeopardActivity>(Intent(context, SnowLeopardActivity::class.java)).use { scenario ->
+        // The guard page now lives inside the course app: the legacy activity is a trampoline and
+        // the real surface is the settings detail host showing SettingsPage.Guard.
+        val intent = Intent(context, com.xiaomanjun.sleepdownschedule.SettingsDetailActivity::class.java)
+            .putExtra(
+                com.xiaomanjun.sleepdownschedule.app.ui.SettingsDetailPageExtra,
+                com.xiaomanjun.sleepdownschedule.feature.settings.SettingsPage.Guard.name
+            )
+        ActivityScenario.launch<com.xiaomanjun.sleepdownschedule.SettingsDetailActivity>(intent).use { scenario ->
             scenario.onActivity { activity -> assertFalse(activity.isFinishing) }
         }
     }

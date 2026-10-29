@@ -1,4 +1,4 @@
-package com.xiaomanjun.sleepdownschedule.feature.guard
+﻿package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import android.content.Context
 import com.xiaomanjun.sleepdownschedule.data.guard.*
@@ -46,7 +46,7 @@ internal object GuardAi {
         val settings = AiImportSettingsStore.load(context)
         require(settings.apiKey.isNotBlank()) { "请先配置自己的 AI API 和模型" }
         val prompt = """
-            你是雪豹闭嘴的声音规则助手。今天是 ${ZonedDateTime.now()}，使用用户当前时区。
+            你是 ShutUp 课程表的声音规则助手。今天是 ${ZonedDateTime.now()}，使用用户当前时区。
             只输出严格 JSON：{"questions":[],"rules":[{"name":"规则名称","templateId":"strict","trigger":"WEEKLY","weekdays":[1,2,3,4,5],"start":"08:00","end":"12:00","validFrom":null,"validThrough":null,"leadMinutes":2,"tailMinutes":1,"policy":null}]}。
             trigger 仅 ALL_DAY 或 WEEKLY；日期 YYYY-MM-DD，时间 HH:mm，星期 1=周一，7=周日。明确全天用 ALL_DAY。
             可选模板：${document.templates.joinToString { "${it.id}=${it.name}" }}。

@@ -113,6 +113,14 @@ import java.util.UUID
             }
         }
         Toggle("闹钟也静音（会影响提醒）", policy.alarms == AlarmPolicy.MUTE) { policy = policy.copy(alarms = if (it) AlarmPolicy.MUTE else AlarmPolicy.KEEP) }
+        Toggle("抢占音频焦点", policy.focusTakeover) { policy = policy.copy(focusTakeover = it) }
+        Toggle("限制屏幕亮度", policy.brightnessCap != null) { policy = policy.copy(brightnessCap = if (it) 40 else null) }
+        policy.brightnessCap?.let { percent ->
+            Text("亮度上限 $percent%（5—100%，只降不升）")
+            Slider(percent.toFloat(), { policy = policy.copy(brightnessCap = it.toInt()) }, valueRange = 5f..100f, steps = 94)
+            FlowRow { listOf(20, 40, 70).forEach { cap -> TextButton(onClick = { policy = policy.copy(brightnessCap = cap) }) { Text("$cap%") } } }
+        }
+        Toggle("锁定亮度（持续纠正）", policy.lockBrightness) { policy = policy.copy(lockBrightness = it) }
         Text("通话音量保持原设置。暂停存在兼容性限制，不保证绝对零漏音。")
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = {

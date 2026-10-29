@@ -1,4 +1,4 @@
-package com.xiaomanjun.sleepdownschedule.feature.importing.shiguang
+﻿package com.xiaomanjun.sleepdownschedule.feature.importing.shiguang
 
 import android.content.Context
 import com.xiaomanjun.sleepdownschedule.feature.importing.EduAdapter
@@ -87,7 +87,7 @@ internal object ShiguangWarehouseUpdater {
 
     suspend fun resolveRemoteScript(context: Context, adapter: EduAdapter): String =
         withContext(Dispatchers.IO) {
-            error("雪豹闭嘴只执行随版本发布的教务脚本")
+            error("ShutUp 课程表只执行随版本发布的教务脚本")
             refreshMutex.withLock {
                 val relativePath = resourceRelativePath(adapter)
                 val snapshot = currentRemoteSnapshot(context)

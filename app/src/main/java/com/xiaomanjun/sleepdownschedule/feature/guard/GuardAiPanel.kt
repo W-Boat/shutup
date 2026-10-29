@@ -1,4 +1,4 @@
-package com.xiaomanjun.sleepdownschedule.feature.guard
+﻿package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -30,7 +30,7 @@ import kotlinx.serialization.encodeToString
         Text("例如：每周一到周五 08:00—12:00，用课堂严格静音模板。")
         Text("只发送本页对话、当前日期和可选模板。既有规则离线执行；AI 结果必须由你确认。")
         OutlinedButton(onClick = showConfig) { Text("配置／测试自己的 AI 接口") }
-        messages.takeLast(12).forEach { m -> Text("${if (m.role == "user") "你" else "雪豹"}：${m.content}") }
+        messages.takeLast(12).forEach { m -> Text("${if (m.role == "user") "你" else "ShutUp"}：${m.content}") }
         OutlinedTextField(input, { input = it.take(6000) }, label = { Text("描述时段、重复方式和保护策略") }, modifier = Modifier.fillMaxWidth(), minLines = 3, enabled = !working)
         Button(enabled = !working && input.isNotBlank(), onClick = {
             val next = (messages + GuardChatMessage("user", input.trim())).takeLast(12)
