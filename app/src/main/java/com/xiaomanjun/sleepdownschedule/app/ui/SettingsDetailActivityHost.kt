@@ -91,6 +91,25 @@ import com.xiaomanjun.sleepdownschedule.transition.transitionRouteIdOrNull
 import kotlinx.coroutines.flow.first
 
 open class SettingsDetailActivityHost : ComponentActivity() {
+    // "从最近任务隐藏" 也必须覆盖声音保护页：它是独立 Activity，MainActivity 的钩子管不到。
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (hideFromRecentsEnabled) {
+            getSystemService(android.app.ActivityManager::class.java)?.appTasks?.forEach {
+                it.setExcludeFromRecents(true)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (hideFromRecentsEnabled) {
+            getSystemService(android.app.ActivityManager::class.java)?.appTasks?.forEach {
+                it.setExcludeFromRecents(false)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // The coordinator selects a translucent destination for snapshot-free anchored routes
         // before super.onCreate. The QuickSheet route also declares this policy in the manifest so

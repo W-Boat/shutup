@@ -165,6 +165,20 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
+        // Shippable artifact for CI: R8 + resource shrinking like release, signed with the debug
+        // key so GitHub Actions can always produce an installable APK without release secrets.
+        create("slim") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            buildConfigField("boolean", "GLASS_FIXED_MORPH", providers.gradleProperty("sleepdown.glassFixedMorph").getOrElse("false").toBoolean().toString())
+            buildConfigField("String", "GLASS_OCCLUSION_MODE", "\"$glassOcclusionMode\"")
+            buildConfigField("String", "SLEEPDOWN_REMOTE_CONFIG_SECRET", "\"\"")
+            buildConfigField("boolean", "SLEEPDOWN_REMOTE_AI_ENABLED", "false")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = !skipReleaseResourceShrink
+            matchingFallbacks += listOf("release")
+        }
     }
 
     flavorDimensions += "distribution"
