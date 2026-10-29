@@ -170,7 +170,7 @@ object PolicyResolver {
     }
 }
 
-@Serializable data class OwnedVolume(val original: Int, val applied: Int)
+@Serializable data class OwnedVolume(val original: Int, val applied: Int, val confirmed: Boolean = false)
 @Serializable data class GuardRuntime(
     val media: Map<String, OwnedVolume> = emptyMap(),
     val ring: OwnedVolume? = null,

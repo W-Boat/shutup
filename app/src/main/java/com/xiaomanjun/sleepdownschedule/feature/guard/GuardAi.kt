@@ -17,8 +17,8 @@ import java.util.UUID
 
 @Serializable internal data class GuardChatMessage(val role: String, val content: String)
 @Serializable internal data class RuleProposal(
-    val name: String, val templateId: String, val trigger: Trigger,
-    val weekdays: Set<Int> = (1..7).toSet(), val start: String = "08:00", val end: String = "12:00",
+    val name: String, val templateId: String? = null, val trigger: Trigger,
+    val weekdays: Set<Int>? = null, val start: String? = null, val end: String? = null,
     val validFrom: String? = null, val validThrough: String? = null,
     val leadMinutes: Int = 2, val tailMinutes: Int = 1, val policy: SoundPolicy? = null
 )
@@ -63,11 +63,13 @@ internal object GuardAi {
         val templates = mutableListOf<GuardTemplate>()
         val rules = answer.rules.map { proposal ->
             require(proposal.trigger != Trigger.COURSES) { "跟随课表请在规则页面明确选择课表" }
+            require(proposal.weekdays != null) { "AI 未明确重复日期，请补充后重新生成" }
+            require(proposal.trigger != Trigger.WEEKLY || (proposal.start != null && proposal.end != null)) { "AI 未返回完整起止时间，请补充后重新生成" }
             val template = proposal.policy?.let { policy ->
                 GuardTemplate(UUID.randomUUID().toString(), "AI · ${proposal.name}", policy).also { templates += it }
             }
-            GuardRule(UUID.randomUUID().toString(), proposal.name, template?.id ?: proposal.templateId,
-                proposal.trigger, weekdays = proposal.weekdays, start = proposal.start, end = proposal.end,
+            GuardRule(UUID.randomUUID().toString(), proposal.name, template?.id ?: requireNotNull(proposal.templateId) { "AI 未明确保护模板或策略" },
+                proposal.trigger, weekdays = proposal.weekdays, start = proposal.start ?: "00:00", end = proposal.end ?: "00:00",
                 validFrom = proposal.validFrom, validThrough = proposal.validThrough,
                 leadMinutes = proposal.leadMinutes, tailMinutes = proposal.tailMinutes).also { it.validate(document.templates + templates) }
         }

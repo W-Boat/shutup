@@ -27,13 +27,14 @@ class AudioController(private val backend: AudioBackend) {
             val owned = state.media[route.identity]
             val current = backend.volume(MEDIA)
             if (cap != null) {
-                if (policy?.lockVolume == true || owned == null || changed) {
+                if (policy?.lockVolume == true || owned == null || !owned.confirmed || changed) {
                     val target = PolicyResolver.cappedVolume(current, backend.maximum(MEDIA), cap)
-                    if (target != current || owned == null) {
+                    if (target != current || owned == null || !owned.confirmed) {
                         val record = OwnedVolume(owned?.original ?: current, target)
                         persist(state.copy(media = state.media + (route.identity to record)))
                         if (target != current) backend.setVolume(MEDIA, target)
                         check(backend.volume(MEDIA) <= target) { "系统未接受媒体音量限制" }
+                        persist(state.copy(media = state.media + (route.identity to record.copy(confirmed = true))))
                     }
                 }
             } else if (owned != null && route.identity != "unknown") {
@@ -48,20 +49,24 @@ class AudioController(private val backend: AudioBackend) {
             if (wanted == null && owned != null) {
                 if (current == owned.applied) backend.setRingMode(owned.original)
                 persist(state.copy(ring = null))
-            } else if (wanted != null && current != wanted && (owned == null || changed)) {
-                persist(state.copy(ring = OwnedVolume(owned?.original ?: current, wanted)))
-                backend.setRingMode(wanted)
+            } else if (wanted != null && (owned == null || !owned.confirmed || changed)) {
+                val record = OwnedVolume(owned?.original ?: current, wanted)
+                persist(state.copy(ring = record))
+                if (current != wanted) backend.setRingMode(wanted)
                 check(backend.ringMode() == wanted) { "系统不支持所选铃声／震动策略" }
+                persist(state.copy(ring = record.copy(confirmed = true)))
             }
         }
         attempt {
             val current = backend.volume(ALARM)
             val owned = state.alarm
-            if (policy?.alarms == AlarmPolicy.MUTE && (owned == null || policy.lockVolume || changed)) {
-                if (current != 0) {
-                    persist(state.copy(alarm = OwnedVolume(owned?.original ?: current, 0)))
-                    backend.setVolume(ALARM, 0)
+            if (policy?.alarms == AlarmPolicy.MUTE && (owned == null || !owned.confirmed || policy.lockVolume || changed)) {
+                if (current != 0 || owned == null || !owned.confirmed) {
+                    val record = OwnedVolume(owned?.original ?: current, 0)
+                    persist(state.copy(alarm = record))
+                    if (current != 0) backend.setVolume(ALARM, 0)
                     check(backend.volume(ALARM) == 0) { "系统未接受闹钟静音" }
+                    persist(state.copy(alarm = record.copy(confirmed = true)))
                 }
             } else if (policy?.alarms != AlarmPolicy.MUTE && owned != null) {
                 if (current == owned.applied) backend.setVolume(ALARM, owned.original)
