@@ -509,25 +509,6 @@ class GuardTileService : TileService() {
             }
         }
     }
-
-    override fun onLongClick() {
-        val intent = Intent(this, SnowLeopardActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (Build.VERSION.SDK_INT >= 34) {
-            startActivityAndCollapse(
-                PendingIntent.getActivity(
-                    this, 7331, intent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-            )
-        } else {
-            startActivityAndCollapseLegacy(intent)
-        }
-    }
-
-    @android.annotation.SuppressLint("StartActivityAndCollapseDeprecated")
-    @Suppress("DEPRECATION")
-    private fun startActivityAndCollapseLegacy(intent: Intent) { startActivityAndCollapse(intent) }
 }
 
 /** Tile 2: dim the screen to the template brightness cap for an instant focus mode. */
