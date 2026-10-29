@@ -1,4 +1,4 @@
-package com.xiaomanjun.sleepdownschedule.feature.guard
+﻿package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import android.app.ActivityManager
 import android.content.Context
@@ -127,7 +127,7 @@ class GuardLockActivity : ComponentActivity() {
         }
     }
 
-    private fun finishLock() {
+    internal fun finishLock() {
         exiting = true
         runCatching { stopLockTask() }
         finishAndRemoveTask()

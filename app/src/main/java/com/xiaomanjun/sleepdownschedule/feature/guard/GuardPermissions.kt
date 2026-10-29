@@ -190,16 +190,16 @@ fun GuardPermissionsScreen(state: AppState, backdrop: Backdrop?) {
     val context = LocalContext.current
     val visualConfig = settingsVisualConfig(state.config)
     // 从系统设置页返回后重新计算状态，避免「授权完了还显示未授权」。
-    var refreshTick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val refreshTick = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-        refreshTick++
+        refreshTick.intValue++
     }
     val bluetoothLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { refreshTick++ }
+    ) { refreshTick.intValue++ }
     SleepDownSecondaryPageList(contentTopPadding = detailContentTopPadding(), contentBottomPadding = DockScrollPadding) {
         item(key = "guard-permissions") {
-            val items = androidx.compose.runtime.remember(refreshTick) {
+            val items = androidx.compose.runtime.remember(refreshTick.intValue) {
                 GuardPermissions.items(context) {
                     if (Build.VERSION.SDK_INT >= 31) bluetoothLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
                 }
