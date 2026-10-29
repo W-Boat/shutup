@@ -1000,7 +1000,7 @@ fun CourseScheduleAppUi(
         providerId = "home-centered-dialog-scene"
     )
     val chromeBackdrop = rememberGlassCombinedBackdrop(backgroundBackdrop, contentBackdrop)
-    remember(glassSceneState) {
+    androidx.compose.runtime.SideEffect {
         glassSceneState.requireValidTopology(
             nodes = listOf(
                 GlassTopologyNode("home-background", GlassBackdropDomain.Background, GlassTopologyNodeRole.Producer),

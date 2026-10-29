@@ -1,6 +1,8 @@
 package com.xiaomanjun.sleepdownschedule.platform.coloros
 
 import android.graphics.RenderEffect as AndroidRenderEffect
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -15,6 +17,13 @@ import com.xiaomanjun.sleepdownschedule.core.ui.designsystem.NativeProgressiveBl
 /** Same Oplus operator and speed as AppBarBlurHelper, without its page-color drawable. */
 @Composable
 internal fun rememberColorOsProgressiveBlur(): NativeProgressiveBlur? {
+    if (Build.VERSION.SDK_INT < 31) return null
+    return rememberColorOsProgressiveBlurApi31()
+}
+
+@RequiresApi(31)
+@Composable
+private fun rememberColorOsProgressiveBlurApi31(): NativeProgressiveBlur? {
     val host = LocalContext.current
     val source = rememberColorOsSource() ?: return null
     val factory = remember(source) {

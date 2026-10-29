@@ -233,6 +233,12 @@ class GuardTileService : TileService() {
     override fun onClick() {
         val intent = Intent(this, SnowLeopardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("guard_action", "protect")
         if (Build.VERSION.SDK_INT >= 34) startActivityAndCollapse(PendingIntent.getActivity(this, 7330, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-        else { @Suppress("DEPRECATION") startActivityAndCollapse(intent) }
+        else collapseOnAndroid11To13(intent)
     }
+
+    // The PendingIntent overload exists only on API 34+. Keep the required legacy call
+    // isolated to the older-platform branch rather than disabling the lint check globally.
+    @android.annotation.SuppressLint("StartActivityAndCollapseDeprecated")
+    @Suppress("DEPRECATION")
+    private fun collapseOnAndroid11To13(intent: Intent) { startActivityAndCollapse(intent) }
 }

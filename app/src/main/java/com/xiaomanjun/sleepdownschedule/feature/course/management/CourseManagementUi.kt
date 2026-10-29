@@ -1267,7 +1267,7 @@ private fun CourseManagementWeekSelectionGrid(
     val columns = 6
     val gap = 8.dp
     val cellHeight = 38.dp
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth()) {
         val rowCount = (totalWeeks + columns - 1) / columns
         val gridHeight = cellHeight * rowCount + gap * (rowCount - 1).coerceAtLeast(0)
         val gapPx = with(density) { gap.toPx() }

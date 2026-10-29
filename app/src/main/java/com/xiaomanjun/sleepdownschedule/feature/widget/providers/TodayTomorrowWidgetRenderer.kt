@@ -128,7 +128,7 @@ internal object TodayTomorrowWidgetRenderer {
         val week = scheduleWeekForDateOrNull(state.config, today)
             ?: effectiveCurrentWeek(state.config, today)
 
-        return RemoteViews(context.packageName, R.layout.widget_today_tomorrow_adaptive_v4).apply {
+        return RemoteViews(context.packageName, R.layout.widget_today_tomorrow).apply {
             setImageViewResource(R.id.widget_app_icon, currentIconResId(context))
             setInt(
                 R.id.widget_tt_root,

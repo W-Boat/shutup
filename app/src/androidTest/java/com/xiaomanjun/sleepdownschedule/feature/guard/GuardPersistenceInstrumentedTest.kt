@@ -9,6 +9,7 @@ import android.content.Context
 import com.xiaomanjun.sleepdownschedule.data.guard.*
 import com.xiaomanjun.sleepdownschedule.domain.guard.*
 import com.xiaomanjun.sleepdownschedule.AppDatabase
+import com.xiaomanjun.sleepdownschedule.MainActivity
 import com.xiaomanjun.sleepdownschedule.data.repository.ScheduleRepository
 import com.xiaomanjun.sleepdownschedule.model.CourseEntity
 import com.xiaomanjun.sleepdownschedule.model.WeekParity
@@ -43,6 +44,12 @@ class GuardPersistenceInstrumentedTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         runBlocking { GuardStore(context).update { GuardDocument() } }
         ActivityScenario.launch<SnowLeopardActivity>(Intent(context, SnowLeopardActivity::class.java)).use { scenario ->
+            scenario.onActivity { activity -> assertFalse(activity.isFinishing) }
+        }
+    }
+    @Test fun originalTimetableEntryRemainsLaunchable() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)).use { scenario ->
             scenario.onActivity { activity -> assertFalse(activity.isFinishing) }
         }
     }

@@ -18,6 +18,10 @@ internal fun Context.resolveSleepDownCustomTabsPackage(): String? {
     ) ?: CustomTabsClient.getPackageName(this, emptyList())
 }
 
+// AndroidX Browser 1.8.0 incorrectly annotates the rounded-corners parameter as
+// ActivitySideSheetDecorationType; the published source and method documentation
+// require the ROUNDED_CORNERS_POSITION_TOP constant already used below.
+@android.annotation.SuppressLint("WrongConstant")
 internal fun Context.openSleepDownCustomTab(
     url: String,
     providerPackage: String?,

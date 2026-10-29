@@ -82,7 +82,7 @@ object SleepDownRemoteConfig {
         } catch (error: Throwable) {
             mutableState.value = mutableState.value.copy(lastError = error.message ?: "远程配置刷新失败")
         } finally {
-			mutableState.value = mutableState.value.copy(isRefreshing = false)
+            mutableState.value = mutableState.value.copy(isRefreshing = false)
             refreshInProgress.set(false)
         }
     }

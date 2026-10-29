@@ -1,7 +1,7 @@
 package com.xiaomanjun.sleepdownschedule.core.ui.controls
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -183,9 +183,9 @@ private fun SliderWithSnapMarker(
     content: @Composable () -> Unit
 ) {
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+    Box(modifier = modifier.fillMaxWidth()) {
         content()
-        val snap = snapValue ?: return@BoxWithConstraints
+        val snap = snapValue ?: return@Box
         val fraction = ((snap - valueRange.start) /
             (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
         Canvas(

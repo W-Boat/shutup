@@ -726,33 +726,33 @@ internal fun homeMorphWithVerticalRebound(
 ): HomeAnchoredMorphGeometry {
     // Closing has its own direct return and must not replay the opening bounce backwards.
     if (!legacyClosingRebound && (closing || overshootPx <= 0f)) return geometry
-        val reboundOffset = run {
-            val expansion = geometry.expansionProgress
-            val peak = peakProgress.coerceIn(0.20f, 0.80f)
-            if (legacyClosingRebound) {
-                if (expansion <= peak) {
-                    overshootPx * homeMorphSmoothStep(peak * 0.45f, peak, expansion)
-                } else {
-                    overshootPx * (1f - homeMorphSmoothStep(peak, 1f, expansion))
-                }
-            } else if (expansion <= peak) {
-                // The bounce starts earlier, during the expansion, so the shell dips down while
-                // it is still growing instead of wobbling after arrival.
-                overshootPx * homeMorphSmoothStep(peak * 0.20f, peak, expansion)
-            } else if (expansion >= HomeAnchoredOpenSettleStartFraction) {
-                0f
+    val reboundOffset = run {
+        val expansion = geometry.expansionProgress
+        val peak = peakProgress.coerceIn(0.20f, 0.80f)
+        if (legacyClosingRebound) {
+            if (expansion <= peak) {
+                overshootPx * homeMorphSmoothStep(peak * 0.45f, peak, expansion)
             } else {
-                // One-shot bounce: after bottoming out at the overshoot limit the shell returns
-                // to the target in a single smooth pass and settles — no oscillation.
-                overshootPx * (
-                    1f - homeMorphSmoothStep(
-                        peak,
-                        HomeAnchoredOpenSettleStartFraction,
-                        expansion
-                    )
-                    )
+                overshootPx * (1f - homeMorphSmoothStep(peak, 1f, expansion))
             }
+        } else if (expansion <= peak) {
+            // The bounce starts earlier, during the expansion, so the shell dips down while
+            // it is still growing instead of wobbling after arrival.
+            overshootPx * homeMorphSmoothStep(peak * 0.20f, peak, expansion)
+        } else if (expansion >= HomeAnchoredOpenSettleStartFraction) {
+            0f
+        } else {
+            // One-shot bounce: after bottoming out at the overshoot limit the shell returns
+            // to the target in a single smooth pass and settles — no oscillation.
+            overshootPx * (
+                1f - homeMorphSmoothStep(
+                    peak,
+                    HomeAnchoredOpenSettleStartFraction,
+                    expansion
+                )
+                )
         }
+    }
     return geometry.copy(
         rect = Rect(
             left = geometry.rect.left,

@@ -1190,6 +1190,7 @@ object NotificationScheduler {
     private fun dndConditionId(context: Context): Uri =
         Condition.newId(context).appendPath("live-update-button").build()
 
+    @androidx.annotation.RequiresApi(35)
     private fun setApplicationDndRuleState(
         context: Context,
         manager: NotificationManager,
@@ -1243,8 +1244,8 @@ object NotificationScheduler {
                 "",
                 R.drawable.ic_moon_light,
                 if (enabled) Condition.STATE_TRUE else Condition.STATE_FALSE,
-                Condition.FLAG_RELEVANT_NOW,
-                Condition.SOURCE_USER_ACTION
+                Condition.SOURCE_USER_ACTION,
+                Condition.FLAG_RELEVANT_NOW
             )
         )
     }
