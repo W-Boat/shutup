@@ -1,6 +1,7 @@
 package com.xiaomanjun.sleepdownschedule.domain.guard
 
 interface AudioBackend {
+    fun prepare(policy: SoundPolicy?) { }
     fun volume(stream: Int): Int
     fun maximum(stream: Int): Int
     fun setVolume(stream: Int, value: Int)
@@ -20,6 +21,7 @@ class AudioController(private val backend: AudioBackend) {
         val policy = resolved.policy
         val key = policy?.toString() + ":" + resolved.trustedRelease
         val changed = key != state.policyKey
+        attempt { backend.prepare(policy) }
         val cap = policy?.mediaCap?.takeUnless { resolved.trustedRelease }
         attempt {
             val owned = state.media[route.identity]
