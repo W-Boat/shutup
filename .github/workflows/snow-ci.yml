@@ -24,8 +24,10 @@ jobs:
           bash ./gradlew testGithubDebugUnitTest --tests '*domain.guard.*' --tests '*feature.guard.*' --tests '*ScheduleTermBoundaryTest' --tests '*ScheduleAdjustmentsTest' --tests '*IcsScheduleCodecTest' --tests '*WakeUpImportSessionTest' --tests '*ScheduleImportCustomCourseTest' -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
       - name: Lint and installable debug APK
         run: bash ./gradlew lintGithubDebug assembleGithubDebug -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
-      - name: Collect APK checksum
-        run: sha256sum app/build/outputs/apk/github/debug/*.apk > debug-apk-sha256.txt
+      - name: Collect APK checksum and size
+        run: |
+          sha256sum app/build/outputs/apk/github/debug/*.apk > debug-apk-sha256.txt
+          { ls -l app/build/outputs/apk/github/debug/*.apk; stat -c '%s bytes  %n' app/build/outputs/apk/github/debug/*.apk; } | tee apk-size.txt
       - name: Verify release shrinker without signing
         run: bash ./gradlew minifyGithubReleaseWithR8 -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
       - uses: actions/upload-artifact@v4
@@ -35,6 +37,7 @@ jobs:
           path: |
             app/build/outputs/apk/github/debug/*.apk
             debug-apk-sha256.txt
+            apk-size.txt
             app/build/reports/
             app/build/test-results/
           if-no-files-found: warn

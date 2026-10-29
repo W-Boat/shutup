@@ -15,8 +15,11 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -89,20 +92,29 @@
                 <data android:mimeType="application/ics" />
             </intent-filter>
         </activity>
-        <activity android:name=".feature.guard.SnowLeopardActivity" android:exported="false" />
+        <activity
+            android:name=".feature.guard.SnowLeopardActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/AppTheme.TranslucentMorph" />
         <service android:name=".feature.guard.GuardService" android:exported="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled scheduled speaker volume protection and trusted headphone disconnect monitoring" />
         </service>
         <service android:name=".feature.guard.GuardNotificationListener" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
         </service>
-        <service android:name=".feature.guard.GuardTileService" android:exported="true" android:icon="@drawable/ic_snow_guard" android:label="雪豹闭嘴" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+        <service android:name=".feature.guard.GuardTileService" android:exported="true" android:icon="@drawable/ic_snow_guard" android:label="ShutUp 保护" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
+        <service android:name=".feature.guard.GuardBrightnessTileService" android:exported="true" android:icon="@drawable/ic_snow_guard" android:label="ShutUp 亮度" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
         </service>
         <receiver android:name=".feature.guard.GuardReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
@@ -114,7 +126,7 @@
             android:exported="true"
             android:icon="@drawable/ic_snow_launcher"
             android:label="@string/app_name"
-            android:targetActivity=".feature.guard.SnowLeopardActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -126,7 +138,7 @@
             android:exported="true"
             android:icon="@drawable/ic_snow_launcher"
             android:label="@string/app_name"
-            android:targetActivity=".feature.guard.SnowLeopardActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -138,7 +150,7 @@
             android:exported="true"
             android:icon="@drawable/ic_snow_launcher"
             android:label="@string/app_name"
-            android:targetActivity=".feature.guard.SnowLeopardActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -150,7 +162,7 @@
             android:exported="true"
             android:icon="@drawable/ic_snow_launcher"
             android:label="@string/app_name"
-            android:targetActivity=".feature.guard.SnowLeopardActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -162,7 +174,7 @@
             android:exported="true"
             android:icon="@drawable/ic_snow_launcher"
             android:label="@string/app_name"
-            android:targetActivity=".feature.guard.SnowLeopardActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -174,7 +186,7 @@
             android:exported="true"
             android:icon="@drawable/ic_snow_launcher"
             android:label="@string/app_name"
-            android:targetActivity=".feature.guard.SnowLeopardActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

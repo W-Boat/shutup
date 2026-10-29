@@ -194,6 +194,7 @@ internal fun AppTopBar(
                 Text(
                     when (settingsPage) {
                         SettingsPage.Root -> "设置"
+                        SettingsPage.Guard -> "声音保护"
                         SettingsPage.General -> "通用设置"
                         SettingsPage.LiquidGlass -> "视效设置"
                         SettingsPage.Widgets -> "小组件设置"

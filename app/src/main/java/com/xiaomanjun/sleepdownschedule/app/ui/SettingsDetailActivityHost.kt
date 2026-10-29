@@ -229,6 +229,10 @@ open class SettingsDetailActivityHost : ComponentActivity() {
                     }
                 ) { backdrop ->
                     when (section) {
+                        SettingsPage.Guard -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardSettingsScreen(
+                            state = state,
+                            backdrop = backdrop
+                        )
                         SettingsPage.General -> GeneralSettingsScreen(
                             state = state,
                             backdrop = backdrop,

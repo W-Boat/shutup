@@ -228,6 +228,14 @@ fun SettingsRootScreen(
             GlassPreferenceSection("应用", modifier = Modifier.homeSwitchGroup()) {
                 SettingsGroup(backdrop = backdrop, config = state.config, modifier = Modifier.fillMaxWidth()) {
                     SettingsNavigationRow(
+                        "声音保护",
+                        subtitle = "课表联动静音／亮度、实况窗、快捷磁贴",
+                        leadingIcon = Icons.Rounded.Notifications,
+                        leadingIconTint = ComposeColor(0xFF126B5B),
+                        selected = selectedPage == SettingsPage.Guard,
+                        onClick = { onPageChange(SettingsPage.Guard) }
+                    )
+                    SettingsNavigationRow(
                         "通用设置",
                         leadingIcon = Icons.Rounded.Settings,
                         leadingIconTint = ComposeColor(0xFF0A84FF),

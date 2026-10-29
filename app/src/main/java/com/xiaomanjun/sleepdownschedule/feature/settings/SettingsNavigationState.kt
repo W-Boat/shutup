@@ -14,7 +14,7 @@ import kotlin.math.sqrt
 import kotlinx.coroutines.flow.map
 
 enum class SettingsSection { Schedule, Notifications }
-enum class SettingsPage { Root, General, LiquidGlass, Widgets, AiImport, DayAgent, Schedule, PeriodSchemes, AutoRefreshSchedule, Notifications, ScheduleManager, BackupRestore, WebDav, BackupPreview, About, Changelog, Donate, PrivacyPolicy }
+enum class SettingsPage { Root, Guard, General, LiquidGlass, Widgets, AiImport, DayAgent, Schedule, PeriodSchemes, AutoRefreshSchedule, Notifications, ScheduleManager, BackupRestore, WebDav, BackupPreview, About, Changelog, Donate, PrivacyPolicy }
 
 /** Matches the navigation motion used by the bundled Miuix system-style navigator. */
 private class MiuixSettingsNavigationEasing(
@@ -45,6 +45,7 @@ internal val MiuixSettingsNavigationMotion: Easing = MiuixSettingsNavigationEasi
 
 internal fun SettingsPage.title(): String = when (this) {
     SettingsPage.Root -> "设置"
+    SettingsPage.Guard -> "声音保护"
     SettingsPage.General -> "通用设置"
     SettingsPage.LiquidGlass -> "视效设置"
     SettingsPage.Widgets -> "小组件设置"

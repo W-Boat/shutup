@@ -5,18 +5,27 @@ import android.app.NotificationManager
 import android.app.AutomaticZenRule
 import android.content.ComponentName
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
+import android.provider.Settings
 import android.service.notification.Condition
 import android.service.notification.ZenPolicy
 import androidx.core.app.NotificationManagerCompat
 import com.xiaomanjun.sleepdownschedule.domain.guard.*
 
-internal class AndroidAudioBackend(private val context: Context, private val enhanced: Boolean) : AudioBackend {
+internal class AndroidAudioBackend(
+    private val context: Context,
+    private val enhanced: Boolean,
+    private val rootMode: Boolean = false
+) : AudioBackend {
     private val audio = requireNotNull(context.getSystemService(AudioManager::class.java))
+    private var focusRequest: AudioFocusRequest? = null
+
     override fun prepare(policy: SoundPolicy?) {
         if (Build.VERSION.SDK_INT < 29) return
         val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
@@ -41,7 +50,7 @@ internal class AndroidAudioBackend(private val context: Context, private val enh
             requireNotNull(id)
         } else {
             @Suppress("DEPRECATION")
-            val rule = AutomaticZenRule("雪豹闭嘴 · 声音保护", null,
+            val rule = AutomaticZenRule("ShutUp 课程表 · 声音保护", null,
                 ComponentName(context, SnowLeopardActivity::class.java), conditionId, zen,
                 NotificationManager.INTERRUPTION_FILTER_PRIORITY, true)
             requireNotNull(manager.addAutomaticZenRule(rule)).also { created ->
@@ -56,17 +65,22 @@ internal class AndroidAudioBackend(private val context: Context, private val enh
             prefs.edit().putString("state", signature).apply()
         }
     }
+
     override fun volume(stream: Int): Int = audio.getStreamVolume(stream)
     override fun maximum(stream: Int): Int = audio.getStreamMaxVolume(stream)
+
     override fun setVolume(stream: Int, value: Int) {
         check(!audio.isVolumeFixed) { "设备采用固定音量，无法限制外放" }
         if (stream == AudioManager.STREAM_MUSIC && enhanced && EnhancedAudioBridge.authorized()) {
             try { EnhancedAudioBridge.setMediaVolume(context, value); return }
             catch (_: Exception) { /* Public API fallback; controller verifies the result. */ }
         }
+        if (rootMode && GuardRootBridge.isAuthorized(context) && GuardRootBridge.setStreamVolume(context, stream, value)) return
         audio.setStreamVolume(stream, value, 0)
     }
+
     override fun ringMode(): Int = audio.ringerMode
+
     override fun setRingMode(value: Int) {
         val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
         check(manager.isNotificationPolicyAccessGranted) { "需要勿扰访问权限才能安全切换静音／震动" }
@@ -77,6 +91,7 @@ internal class AndroidAudioBackend(private val context: Context, private val enh
         if (Build.VERSION.SDK_INT < 35 && manager.currentInterruptionFilter != previousFilter)
             manager.setInterruptionFilter(previousFilter)
     }
+
     override fun pause() {
         check(context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)) { "暂停播放需要通知访问权限" }
         val manager = requireNotNull(context.getSystemService(MediaSessionManager::class.java))
@@ -84,15 +99,57 @@ internal class AndroidAudioBackend(private val context: Context, private val enh
             if (controller.playbackState?.state == PlaybackState.STATE_PLAYING) controller.transportControls.pause()
         }
     }
+
+    override fun brightness(): Int = runCatching {
+        Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, -1)
+    }.getOrDefault(-1)
+
+    override fun maximumBrightness(): Int = 255
+
+    override fun setBrightness(value: Int) {
+        val target = value.coerceIn(0, maximumBrightness())
+        if (Settings.System.canWrite(context)) {
+            Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, target)
+            return
+        }
+        if (rootMode && GuardRootBridge.setBrightness(context, target)) return
+        check(false) { "修改亮度需要“修改系统设置”权限或 Root" }
+    }
+
+    override fun takeAudioFocus() {
+        val request = focusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_UNKNOWN)
+                    .build()
+            )
+            .setWillPauseWhenDucked(false)
+            .setOnAudioFocusChangeListener { }
+            .build()
+            .also { focusRequest = it }
+        audio.requestAudioFocus(request)
+    }
+
+    override fun abandonAudioFocus() {
+        focusRequest?.let { audio.abandonAudioFocusRequest(it) }
+        focusRequest = null
+    }
+
     override fun capabilities() = CapabilityReport(listOf(
         Capability("媒体音量", !audio.isVolumeFixed, if (audio.isVolumeFixed) "系统固定音量" else "已提供音量接口；实际执行后回读"),
         Capability("铃声／通知", requireNotNull(context.getSystemService(NotificationManager::class.java)).isNotificationPolicyAccessGranted,
             "使用系统铃声模式，通知通常联动；图书馆模板关闭铃声震动，不控制第三方自行触发的触觉反馈"),
         Capability("暂停播放", context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context), "仅控制提供媒体会话的播放器，不保证拦截播放开头"),
+        Capability("音频焦点抢占", true, "保护期间持续持有媒体焦点，其他应用获得焦点时会被本应用打断"),
+        Capability("亮度控制", Settings.System.canWrite(context) || (rootMode && GuardRootBridge.isAuthorized(context)),
+            if (Settings.System.canWrite(context)) "已授予修改系统设置权限" else "需要“修改系统设置”权限，或开启 Root 模式"),
         Capability("精确触发", Build.VERSION.SDK_INT < 31 || requireNotNull(context.getSystemService(AlarmManager::class.java)).canScheduleExactAlarms(), "未授权时采用非精确闹钟，可能延迟"),
         Capability("保护通知", NotificationManagerCompat.from(context).areNotificationsEnabled(), "建议允许通知，以便随时查看状态与放行"),
-        Capability("Shizuku", EnhancedAudioBridge.authorized(), "可选增强接口；不等于已验证硬锁音量"),
-        Capability("音量锁定", true, "当前实现为自动纠正，存在回调／调度延迟；尚无真机增强锁定认证")
+        Capability("Root 模式", rootMode && GuardRootBridge.isAuthorized(context),
+            if (GuardRootBridge.isAuthorized(context)) "su 已授权，音量和亮度使用系统直写" else "未授权；可在设备页激活"),
+        Capability("Shizuku", EnhancedAudioBridge.authorized(), "可选增强接口；不依赖 Root"),
+        Capability("音量锁定", true, "自动纠正 + 可选 Root 直写；系统回调仍有毫秒级延迟")
     ))
 }
 

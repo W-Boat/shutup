@@ -18,9 +18,17 @@ data class SoundPolicy(
     val lockVolume: Boolean = true,
     val ring: RingPolicy = RingPolicy.SILENT,
     val alarms: AlarmPolicy = AlarmPolicy.KEEP,
-    val trustedOutputAllowed: Boolean = true
+    val trustedOutputAllowed: Boolean = true,
+    /** Screen brightness cap in percent of the device maximum; null keeps the user's level. */
+    val brightnessCap: Int? = null,
+    val lockBrightness: Boolean = false,
+    /** Preempt other apps' audio focus while the protection window is active. */
+    val focusTakeover: Boolean = true
 ) {
-    fun validate() { require(mediaCap == null || mediaCap in 0..100) { "媒体上限必须在 0—100% 之间" } }
+    fun validate() {
+        require(mediaCap == null || mediaCap in 0..100) { "媒体上限必须在 0—100% 之间" }
+        require(brightnessCap == null || brightnessCap in 5..100) { "亮度上限必须在 5—100% 之间" }
+    }
 }
 
 @Serializable
@@ -81,7 +89,15 @@ data class GuardDocument(
     val selectedTemplateId: String? = null,
     val manualUntil: Long = 0,
     val bypassUntil: Long = 0,
-    val skipUntil: Long = 0
+    val skipUntil: Long = 0,
+    /** Optional su activation: hard volume/brightness writes and battery whitelist. */
+    val rootMode: Boolean = false,
+    /** 1px transparent overlay window that keeps the protection process out of the freezer. */
+    val keepAliveOverlay: Boolean = false,
+    /** Publish guard state to Live Updates / Xiaomi focus island. */
+    val liveActivity: Boolean = true,
+    /** Seconds between the pre-protection reminder and the actual mute; 0 disables it. */
+    val preReminderSeconds: Int = 10
 ) {
     val templates: List<GuardTemplate> get() = GuardTemplates.builtIns + customTemplates
     fun validate() {
@@ -90,6 +106,7 @@ data class GuardDocument(
         require(customTemplates.none { it.builtIn || it.id in GuardTemplates.builtIns.map { t -> t.id } }) { "固定模板不可覆盖" }
         require(templates.map { it.id }.distinct().size == templates.size) { "模板编号重复" }
         require(rules.map { it.id }.distinct().size == rules.size) { "规则编号重复" }
+        require(preReminderSeconds in 0..120) { "保护前提醒应在 0—120 秒之间" }
         templates.forEach { it.policy.validate() }
         rules.forEach { it.validate(templates) }
         require(selectedTemplateId == null || templates.any { it.id == selectedTemplateId }) { "所选模板不存在" }
@@ -148,7 +165,10 @@ object PolicyResolver {
             pausePlayback = policies.any { it.pausePlayback }, lockVolume = policies.any { it.lockVolume },
             ring = policies.maxBy { it.ring.ordinal }.ring,
             alarms = if (policies.any { it.alarms == AlarmPolicy.MUTE }) AlarmPolicy.MUTE else AlarmPolicy.KEEP,
-            trustedOutputAllowed = policies.all { it.trustedOutputAllowed }
+            trustedOutputAllowed = policies.all { it.trustedOutputAllowed },
+            brightnessCap = policies.mapNotNull { it.brightnessCap }.minOrNull(),
+            lockBrightness = policies.any { it.lockBrightness },
+            focusTakeover = policies.any { it.focusTakeover }
         )
         val release = combined.trustedOutputAllowed && route.exclusive && route.trusted
         return ResolvedPolicy(combined, active.map { it.reason }.distinct() +
@@ -175,6 +195,7 @@ object PolicyResolver {
     val media: Map<String, OwnedVolume> = emptyMap(),
     val ring: OwnedVolume? = null,
     val alarm: OwnedVolume? = null,
+    val brightness: OwnedVolume? = null,
     val previousRoute: String? = null,
     val previousTrusted: Boolean = false,
     val policyKey: String? = null

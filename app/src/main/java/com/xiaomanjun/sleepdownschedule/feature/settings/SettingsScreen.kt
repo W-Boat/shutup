@@ -385,6 +385,10 @@ private fun SettingsPageContent(
 ) {
     when (page) {
         SettingsPage.Root -> SettingsRootScreen(pageState, backdrop, onPageChange = onPageChange)
+        SettingsPage.Guard -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardSettingsScreen(
+            state = state,
+            backdrop = backdrop
+        )
         SettingsPage.General -> GeneralSettingsScreen(
             state = state,
             backdrop = backdrop,

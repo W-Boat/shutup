@@ -45,6 +45,28 @@ android {
         buildConfig = true
         aidl = true
     }
+    // The product ships a Chinese UI. Dropping the ~80 locales that AndroidX/Miuix bundle removes
+    // thousands of unused resources without touching any visible string.
+    androidResources {
+        localeFilters += listOf("zh", "en")
+    }
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
+                "META-INF/*.kotlin_module",
+                "META-INF/*.version",
+                "DebugProbesKt.bin",
+                "kotlin-tooling-metadata.json"
+            )
+        }
+    }
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }

@@ -31,6 +31,7 @@ internal object XiaomiSuperIsland {
     private const val FocusParameter = "miui.focus.param"
     private const val SmallPicture = "miui.focus.pic_small"
     const val DndActionKey = "miui.focus.action_dnd"
+    const val GuardActionKey = "shutup.guard.end"
     private val sequence = AtomicLong(System.currentTimeMillis())
 
     fun isXiaomiDevice(manufacturer: String, brand: String): Boolean =
@@ -171,8 +172,101 @@ internal object XiaomiSuperIsland {
         })
     }
 
-    private fun nextSequence(context: Context): Long = synchronized(sequence) {
-        val prefs = context.getSharedPreferences(Prefs, Context.MODE_PRIVATE)
+    /**
+     * Sound-guard variant of the focus notification. The guard surface has no course phase, so it
+     * publishes its own text pair plus an optional end-of-protection timer instead of pretending to
+     * be a class reminder.
+     */
+    fun decorateGuard(
+        context: Context,
+        notification: Notification,
+        title: String,
+        content: String,
+        shortText: String,
+        timerAtMillis: Long? = null,
+        actionTitle: String = "结束保护",
+        actionKey: String = GuardActionKey
+    ) {
+        if (!isEnabled(context)) return
+        val now = System.currentTimeMillis()
+        notification.extras.putString(
+            FocusParameter,
+            guardParameters(title, content, shortText, timerAtMillis, now, actionTitle, actionKey, nextSequence(context))
+        )
+        val appIcon = Icon.createWithResource(context, currentLiveUpdateIconResId(context))
+        notification.extras.putBundle("miui.focus.pics", Bundle().apply {
+            putParcelable("miui.focus.pic_app_icon", appIcon)
+            putParcelable("miui.focus.pic_app_icon_dark", appIcon)
+            putParcelable(SmallPicture, appIcon)
+            putParcelable("miui.focus.pic_small_dark", appIcon)
+        })
+    }
+
+    private fun guardParameters(
+        title: String,
+        content: String,
+        shortText: String,
+        timerAtMillis: Long?,
+        nowMillis: Long,
+        actionTitle: String,
+        actionKey: String,
+        sequenceValue: Long
+    ): String {
+        val live = timerAtMillis != null && timerAtMillis > nowMillis
+        val left = JSONObject().put("type", 1).put("textInfo", JSONObject()
+            .put("title", title).put("content", "")
+            .put("showHighlightColor", false).put("narrowFont", false))
+        val bigIsland = JSONObject().put("templateNo", if (live) 6 else 2)
+            .put("imageTextInfoLeft", left)
+            .put("textInfo", JSONObject().put("frontTitle", "")
+                .put("title", if (live) "" else shortText)
+                .put("content", "")
+                .put("showHighlightColor", false).put("narrowFont", false))
+        if (live) {
+            bigIsland.put("sameWidthDigitInfo", JSONObject()
+                .put("content", "后结束")
+                .put("showHighlightColor", false)
+                .put("timerInfo", timerInfo(timerAtMillis, nowMillis)))
+        }
+        val island = JSONObject()
+            .put("islandProperty", 1)
+            .put("islandTimeout", timerAtMillis?.let { ((it - nowMillis + 999L) / 1000L).coerceIn(60L, 43_200L).toInt() } ?: 43_200)
+            .put("bigIslandArea", bigIsland)
+            .put("smallIslandArea", JSONObject().put("picInfo", JSONObject()
+                .put("type", 1).put("pic", SmallPicture)
+                .put("picDark", "miui.focus.pic_small_dark")))
+        val card = JSONObject()
+            .put("type", 2).put("title", title).put("content", content)
+            .put("subTitle", "").put("extraTitle", "").put("specialTitle", "")
+            .put("subContent", "").put("picFunction", "")
+            .put("showDivider", true).put("showContentDivider", false)
+            .put("colorTitle", "#111111").put("colorTitleDark", "#ffffff")
+            .put("colorContent", "#333333").put("colorContentDark", "#cccccc")
+        val hint = JSONObject()
+            .put("type", 2).put("content", if (live) "距离结束" else "现在")
+            .put("title", shortText)
+            .put("subContent", "").put("subTitle", "")
+            .put("colorContent", "#666666").put("colorContentDark", "#aaaaaa")
+            .put("colorTitle", "#222222").put("colorTitleDark", "#eeeeee")
+            .put("actionInfo", JSONObject().put("actionTitle", actionTitle).put("action", actionKey))
+            .put("timerInfo", timerInfo(timerAtMillis, nowMillis))
+        val parameters = JSONObject()
+            .put("protocol", 1)
+            .put("business", "shutup_guard")
+            .put("enableFloat", false)
+            .put("updatable", true)
+            .put("outEffectSrc", "outer_glow")
+            .put("aodTitle", title)
+            .put("reopen", "reopen")
+            .put("sequence", sequenceValue)
+            .put("baseInfo", card)
+            .put("picInfo", JSONObject().put("type", 1).put("pic", ""))
+            .put("hintInfo", hint)
+            .put("param_island", island)
+        return JSONObject().put("param_v2", parameters).toString()
+    }
+
+    private fun nextSequence(context: Context): Long = synchronized(sequence) {        val prefs = context.getSharedPreferences(Prefs, Context.MODE_PRIVATE)
         val next = maxOf(sequence.get(), prefs.getLong(Sequence, 0L), System.currentTimeMillis()) + 1L
         sequence.set(next)
         prefs.edit().putLong(Sequence, next).commit()
