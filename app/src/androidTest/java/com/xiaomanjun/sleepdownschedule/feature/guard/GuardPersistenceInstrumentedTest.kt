@@ -4,9 +4,17 @@ import android.content.Intent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.room.Room
 import android.content.Context
 import com.xiaomanjun.sleepdownschedule.data.guard.*
 import com.xiaomanjun.sleepdownschedule.domain.guard.*
+import com.xiaomanjun.sleepdownschedule.AppDatabase
+import com.xiaomanjun.sleepdownschedule.data.repository.ScheduleRepository
+import com.xiaomanjun.sleepdownschedule.model.CourseEntity
+import com.xiaomanjun.sleepdownschedule.model.WeekParity
+import com.xiaomanjun.sleepdownschedule.model.ImportDraft
+import com.xiaomanjun.sleepdownschedule.model.defaultConfig
+import com.xiaomanjun.sleepdownschedule.model.defaultPeriods
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.*
@@ -37,5 +45,21 @@ class GuardPersistenceInstrumentedTest {
         ActivityScenario.launch<SnowLeopardActivity>(Intent(context, SnowLeopardActivity::class.java)).use { scenario ->
             scenario.onActivity { activity -> assertFalse(activity.isFinishing) }
         }
+    }
+    @Test fun overwriteKeepsRecoverableScheduleAndUndoPreservesNewImport() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        try {
+            val repo = ScheduleRepository(database)
+            repo.ensureDefaults()
+            fun course(name: String) = CourseEntity(name = name, teacher = null, location = null,
+                weekday = 1, periods = listOf(1), weeks = listOf(1), weekParity = WeekParity.ALL, note = null)
+            repo.addCourse(course("原课程"))
+            repo.importDraft(ImportDraft(defaultConfig(), defaultPeriods(), listOf(course("新课程"))))
+            assertEquals("新课程", repo.activeSnapshot().courses.single().name)
+            repo.undoLastGuardImport()
+            assertEquals("原课程", repo.activeSnapshot().courses.single().name)
+            assertTrue(repo.snapshot().allCourses.any { it.name == "新课程" })
+        } finally { database.close() }
     }
 }

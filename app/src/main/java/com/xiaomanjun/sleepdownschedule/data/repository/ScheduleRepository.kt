@@ -783,7 +783,7 @@ class ScheduleRepository(private val database: AppDatabase) {
         val label = profileDao.getProfiles().find { it.id == scheduleId }?.name.orEmpty()
         val backupId = profileDao.upsertProfile(ScheduleProfileEntity(
             name = "雪豹导入快照 · $label · ${java.time.LocalDateTime.now()}", isActive = false)).toInt()
-        val backupConfig = config.copy(id = backupId, activePeriodSchemeId = null, notificationsEnabled = false)
+        val backupConfig = config.copy(id = backupId, activePeriodSchemeId = null)
         val backupPeriods = periods.map { it.copy(scheduleId = backupId) }
         configDao.upsertConfig(backupConfig)
         configDao.upsertPeriods(backupPeriods)
@@ -822,6 +822,7 @@ class ScheduleRepository(private val database: AppDatabase) {
             currentWeek = config.currentWeek.coerceIn(1, term.totalWeeks), termStartDate = term.startDate)
         val rows = selected.map { it.entity(scheduleId) }
         projectCourseArrangements(rows, updatedConfig, periods)
+        if (updatedConfig != config || rows.sortedBy { it.id } != current.sortedBy { it.id }) preserveGuardImport(scheduleId)
         val retainedIds = rows.map { it.id }.toSet()
         current.filterNot { it.id in retainedIds }.forEach { courseDao.deleteCourse(it.id) }
         val previous = current.associateBy { it.id }

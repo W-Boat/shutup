@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AudioControllerTest {
-    private class FakeAudio : AudioBackend {
+    private open class FakeAudio : AudioBackend {
         var media = 8; var alarm = 6; var ringer = 2; var pauses = 0; var sets = 0
         override fun volume(stream: Int) = if (stream == 3) media else alarm
         override fun maximum(stream: Int) = 15
@@ -70,5 +70,20 @@ class AudioControllerTest {
         val audio = FakeAudio()
         AudioController(audio).reconcile(GuardRuntime(previousTrusted = true), resolution(), speaker, {}) { fail(it) }
         assertEquals(1, audio.pauses); assertEquals(0, audio.media)
+    }
+    @Test fun grantedPermissionRetriesPreviouslyFailedRingChange() {
+        var allowed = false
+        val audio = object : FakeAudio() {
+            override fun setRingMode(value: Int) {
+                check(allowed) { "permission missing" }
+                super.setRingMode(value)
+            }
+        }
+        val controller = AudioController(audio)
+        val state = controller.reconcile(GuardRuntime(), resolution(), speaker, {}) { }
+        assertEquals(2, audio.ringer); assertFalse(state.ring!!.confirmed)
+        allowed = true
+        val retried = controller.reconcile(state, resolution(), speaker, {}) { fail(it) }
+        assertEquals(0, audio.ringer); assertTrue(retried.ring!!.confirmed)
     }
 }

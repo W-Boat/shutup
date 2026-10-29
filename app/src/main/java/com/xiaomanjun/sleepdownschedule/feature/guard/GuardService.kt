@@ -64,7 +64,7 @@ internal object GuardEngine {
             if (document.enhanced && !EnhancedAudioBridge.authorized()) errors += "Shizuku 不可用，已降级普通控制"
             val backend = AndroidAudioBackend(context, document.enhanced)
             AudioController(backend).reconcile(store.runtime(), resolved, route, store::saveRuntime) { errors += it }
-            val exact = Build.VERSION.SDK_INT < 31 || context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+            val exact = Build.VERSION.SDK_INT < 31 || requireNotNull(context.getSystemService(AlarmManager::class.java)).canScheduleExactAlarms()
             if (!exact && document.rules.any { it.enabled }) errors += "未授予精确闹钟权限，时段切换可能延迟"
             val title = when {
                 errors.isNotEmpty() -> "能力受限"
@@ -106,7 +106,7 @@ internal object GuardEngine {
     }
 
     private fun schedule(context: Context, time: Long) {
-        val alarm = context.getSystemService(AlarmManager::class.java)
+        val alarm = requireNotNull(context.getSystemService(AlarmManager::class.java))
         val exact = Build.VERSION.SDK_INT < 31 || alarm.canScheduleExactAlarms()
         val signature = "$time|$exact"
         if (signature == scheduledSignature) return
@@ -141,13 +141,13 @@ class GuardService : Service() {
     private val observer = object : ContentObserver(handler) { override fun onChange(selfChange: Boolean) { signal.trySend(false) } }
     override fun onCreate() {
         super.onCreate()
-        val manager = getSystemService(NotificationManager::class.java)
+        val manager = requireNotNull(getSystemService(NotificationManager::class.java))
         manager.createNotificationChannel(NotificationChannel("snow_guard", "声音保护状态", NotificationManager.IMPORTANCE_LOW).apply {
             setSound(null, null); enableVibration(false)
         })
         startForeground(7311, notification(GuardEngine.status.value))
         GuardEngine.running = true
-        audio = getSystemService(AudioManager::class.java)
+        audio = requireNotNull(getSystemService(AudioManager::class.java))
         audio.registerAudioDeviceCallback(devices, handler)
         audio.registerAudioPlaybackCallback(playback, handler)
         contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, observer)
