@@ -1,0 +1,50 @@
+name: Snow Leopard signed release
+on:
+  push:
+    tags: ['snow-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-snow
+      - name: Verify signing and version
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SNOW_KEYSTORE_BASE64 }}
+          TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo 'Configure SNOW_KEYSTORE_BASE64 and signing secrets first'; exit 1; }
+          if [ "$REF_TYPE" = tag ]; then
+            VERSION=$(sed -n 's/^val sleepDownVersionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+            test "$TAG" = "snow-v$VERSION" || { echo 'Tag does not match application version'; exit 1; }
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/snow-release.jks"
+      - name: Verify and build signed release
+        env:
+          SNOW_RELEASE_STORE_FILE: ${{ runner.temp }}/snow-release.jks
+          SNOW_RELEASE_STORE_PASSWORD: ${{ secrets.SNOW_RELEASE_STORE_PASSWORD }}
+          SNOW_RELEASE_KEY_ALIAS: ${{ secrets.SNOW_RELEASE_KEY_ALIAS }}
+          SNOW_RELEASE_KEY_PASSWORD: ${{ secrets.SNOW_RELEASE_KEY_PASSWORD }}
+        run: |
+          bash ./gradlew testGithubDebugUnitTest --tests '*domain.guard.*' --tests '*feature.guard.*' -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
+          bash ./gradlew lintGithubRelease assembleGithubRelease -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
+          sha256sum app/build/outputs/apk/github/release/*.apk > release-apk-sha256.txt
+          git archive --format=zip --output=snow-leopard-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snow-leopard-signed-release
+          path: |
+            app/build/outputs/apk/github/release/*.apk
+            release-apk-sha256.txt
+            snow-leopard-source.zip
+            docs/snow-leopard/RELEASE_NOTES.md
+      - name: Remove signing file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/snow-release.jks"

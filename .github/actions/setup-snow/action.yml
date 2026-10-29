@@ -1,0 +1,26 @@
+name: Set up Snow Leopard Android build
+description: Pinned patched Miuix and Android toolchain; builds run in GitHub Actions only
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7
+      with:
+        repository: compose-miuix-ui/miuix
+        ref: c36fab72391801d1e3ea5a00f966bf16bac28d4c
+        path: .ci/miuix
+        persist-credentials: false
+    - name: Apply upstream public Miuix patch
+      shell: bash
+      run: git -C .ci/miuix apply "$GITHUB_WORKSPACE/patches/miuix-0.9.3-sleepdown.patch"
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: '17'
+    - uses: android-actions/setup-android@v4
+      with:
+        packages: 'platform-tools'
+        log-accepted-android-sdk-licenses: 'false'
+    - shell: bash
+      run: sdkmanager 'platforms;android-37.0'
+    - uses: gradle/actions/setup-gradle@v4
+
