@@ -62,4 +62,21 @@ class GuardPersistenceInstrumentedTest {
             assertTrue(repo.snapshot().allCourses.any { it.name == "新课程" })
         } finally { database.close() }
     }
+    @Test fun emptyScheduleCanAlsoBeRecoveredAfterImport() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        try {
+            val repo = ScheduleRepository(database)
+            repo.ensureDefaults()
+            val before = repo.activeSnapshot()
+            val imported = CourseEntity(name = "误导入", teacher = null, location = null,
+                weekday = 1, periods = listOf(1), weeks = listOf(1), weekParity = WeekParity.ALL, note = null)
+            repo.importDraft(ImportDraft(defaultConfig(), defaultPeriods(), listOf(imported)))
+            repo.undoLastGuardImport()
+            val recovered = repo.activeSnapshot()
+            assertTrue(recovered.courses.isEmpty())
+            assertEquals(before.config.termStartDate, recovered.config.termStartDate)
+            assertEquals(before.periods.map { it.startTime to it.endTime }, recovered.periods.map { it.startTime to it.endTime })
+        } finally { database.close() }
+    }
 }

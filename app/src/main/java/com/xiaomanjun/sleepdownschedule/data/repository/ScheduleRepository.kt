@@ -777,7 +777,6 @@ class ScheduleRepository(private val database: AppDatabase) {
     /** Durable backup within the SAME Room transaction as the destructive import. */
     private suspend fun preserveGuardImport(scheduleId: Int) {
         val courses = courseDao.getCourses(scheduleId)
-        if (courses.isEmpty()) return
         val config = configDao.getConfig(scheduleId) ?: return
         val periods = configDao.getPeriods(scheduleId)
         val label = profileDao.getProfiles().find { it.id == scheduleId }?.name.orEmpty()
