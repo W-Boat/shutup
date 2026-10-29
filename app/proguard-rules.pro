@@ -19,6 +19,9 @@
 -keep class com.xiaomanjun.sleepdownschedule.feature.experimental.XiaomiRootBridge$* { *; }
 -keep class com.xiaomanjun.sleepdownschedule.feature.experimental.XiaomiRootFirewallCommand { *; }
 -keep class com.xiaomanjun.sleepdownschedule.feature.experimental.XiaomiFirewallService { *; }
+# Shizuku constructs the speaker-protection service reflectively in a separate process.
+-keep class com.xiaomanjun.sleepdownschedule.feature.guard.GuardAudioUserService { *; }
+-keep class com.xiaomanjun.sleepdownschedule.feature.guard.IGuardAudioService$* { *; }
 -keep class com.xiaomanjun.sleepdownschedule.feature.experimental.IXiaomiFirewallService$* { *; }
 -keep class com.xiaomanjun.sleepdownschedule.feature.experimental.XiaomiNetworkRestoreReceiver { *; }
 -keep class com.xiaomanjun.sleepdownschedule.feature.experimental.XiaomiNetworkRestoreReceiver$* { *; }

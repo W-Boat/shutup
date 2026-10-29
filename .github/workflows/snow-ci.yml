@@ -26,6 +26,8 @@ jobs:
         run: bash ./gradlew lintGithubDebug assembleGithubDebug -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
       - name: Collect APK checksum
         run: sha256sum app/build/outputs/apk/github/debug/*.apk > debug-apk-sha256.txt
+      - name: Verify release shrinker without signing
+        run: bash ./gradlew minifyGithubReleaseWithR8 -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
         with:
