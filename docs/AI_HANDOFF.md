@@ -2,6 +2,8 @@
 
 ## 雪豹闭嘴衍生项目（2026-10-29）
 
+用户最新要求：最低仅支持 Android 11，应用 minSdk 与模拟器矩阵已改为 API 30 起；不再适配 Android 8—10。
+
 本工作目录属于 `W-Boat/shutup`，从 `v1.2.7.1` / `bdc380ee6796de6c633fe2688120a77c9fe8356f` 派生，分支 `codex/snow-leopard`。用户要求实现完整声音保护方案，并明确所有构建、自动化测试和打包只能在 GitHub Actions 进行。原作者署名、LICENSE.md 和 THIRD_PARTY_NOTICES.md 保留；新包 ID 为 `io.github.wboat.shutup`。实现与验收入口见 [雪豹交付](snow-leopard/DELIVERY.md)。以下是继承的上游历史交接，不是本项目的授权或完成证明。
 
 更新：2026-10-20，Asia/Shanghai。此页保存维护者主工作目录的当前交接，历史过程引用报告；不代表其他 worktree 的任务已结束。接手前完整阅读 [AGENTS.md](../AGENTS.md)，再核对实际 Git、PR、用户新指令与本页是否一致。流程和交接字段见 [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)。

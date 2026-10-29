@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        minSdk = 28
+        minSdk = 30
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         missingDimensionStrategy("distribution", "github")

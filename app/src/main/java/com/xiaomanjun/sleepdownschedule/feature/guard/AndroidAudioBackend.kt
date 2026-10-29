@@ -97,11 +97,12 @@ internal class AndroidAudioBackend(private val context: Context, private val enh
 }
 
 internal fun currentOutput(context: Context, document: GuardDocument): RouteEvidence {
+    val devices = requireNotNull(context.getSystemService(AudioManager::class.java)).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    val privateConnected = devices.any { it.type !in setOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) }
+    // The common disconnect case must not wait for a privileged-service rebind.
+    if (!privateConnected) return RouteEvidence("speaker", false, false, "手机扬声器（无可确认的可信输出）")
     if (document.enhanced && EnhancedAudioBridge.authorized()) {
         runCatching { EnhancedAudioBridge.route(context, document) }.getOrNull()?.let { return it }
     }
-    val devices = requireNotNull(context.getSystemService(AudioManager::class.java)).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-    val privateConnected = devices.any { it.type !in setOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) }
-    return if (privateConnected) RouteEvidence("unknown", false, false, "检测到外接设备，无法确认全部媒体路由，继续限制外放")
-    else RouteEvidence("speaker", false, false, "手机扬声器（无可确认的可信输出）")
+    return RouteEvidence("unknown", false, false, "检测到外接设备，无法确认全部媒体路由，继续限制外放")
 }

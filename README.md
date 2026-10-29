@@ -1,6 +1,6 @@
 # 雪豹闭嘴
 
-按固定时段、全天或实际课表自动限制外放的 Android 工具。Android 8.0+；应用 ID `io.github.wboat.shutup`，Debug 为 `.debug`。
+按固定时段、全天或实际课表自动限制外放的 Android 工具。Android 11+（API 30）；应用 ID `io.github.wboat.shutup`，Debug 为 `.debug`。
 
 **本项目基于 SleepDown课程表 修改；原作者：xiaomanjun233；原项目：https://github.com/xiaomanjun233/SleepDown-Schedule 。这是由 W-Boat 维护的非官方、非商业衍生版。** 对应完整源码、构建脚本、资源和许可在[本仓库](https://github.com/W-Boat/shutup)公开提供；完整限制见 [LICENSE.md](LICENSE.md) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

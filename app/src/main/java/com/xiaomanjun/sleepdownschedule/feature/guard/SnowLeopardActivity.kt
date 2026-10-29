@@ -249,8 +249,14 @@ class SnowLeopardActivity : ComponentActivity() {
 }
 
 internal fun formatMoment(time: Long): String = Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
-internal fun policySummary(p: SoundPolicy): String = "媒体${p.mediaCap?.let { "≤$it%" } ?: "保持"} · ${when (p.ring) { RingPolicy.KEEP -> "铃声保持"; RingPolicy.VIBRATE -> "震动"; RingPolicy.SILENT -> "静音" }} · 闹钟${if (p.alarms == AlarmPolicy.KEEP) "保持" else "静音"}" +
-    if (p.pausePlayback) " · 尝试暂停播放" else ""
+internal fun policySummary(p: SoundPolicy): String = listOf(
+    "媒体${p.mediaCap?.let { "≤$it%" } ?: "保持"}",
+    when (p.ring) { RingPolicy.KEEP -> "铃声保持"; RingPolicy.VIBRATE -> "震动"; RingPolicy.SILENT -> "静音" },
+    "闹钟${if (p.alarms == AlarmPolicy.KEEP) "保持" else "静音"}",
+    if (p.pausePlayback) "尝试暂停" else "不暂停播放",
+    if (p.lockVolume) "自动纠正音量" else "不锁定音量",
+    if (p.trustedOutputAllowed) "可信耳机可放行" else "耳机不豁免"
+).joinToString(" · ")
 internal fun ruleSummary(r: GuardRule, doc: GuardDocument): String = "${doc.templates.find { it.id == r.templateId }?.name ?: "模板缺失"} · " + when (r.trigger) {
     Trigger.ALL_DAY -> "全天（星期 ${r.weekdays.sorted().joinToString()}）"
     Trigger.WEEKLY -> "星期 ${r.weekdays.sorted().joinToString()} ${r.start}—${r.end}"

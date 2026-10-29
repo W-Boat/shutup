@@ -71,7 +71,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.wboat.shutup"
-        minSdk = 26
+        minSdk = 30
         targetSdk = 36
         versionCode = 1
         versionName = sleepDownVersionName

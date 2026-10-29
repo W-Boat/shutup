@@ -6,7 +6,7 @@
 
 本地不运行编译、Gradle、测试或打包。所有检查在 GitHub Actions：
 
-- `snow-ci.yml`：推送 main、codex 分支或 PR，执行新规则／状态机／AI 协议及相关课表导入单测、Lint、Debug 打包；模拟器矩阵 API 26、31、34、35、36 验证持久化、无效写入原子性和首页启动。产物含 APK、SHA-256 和报告。
+- `snow-ci.yml`：推送 main、codex 分支或 PR，执行新规则／状态机／AI 协议及相关课表导入单测、Lint、Debug 打包；模拟器矩阵 API 30、31、34、35、36 验证持久化、无效写入原子性和首页启动。产物含 APK、SHA-256 和报告。最低系统按用户最新要求设为 Android 11（API 30）。
 - `snow-release.yml`：手动触发或推送匹配应用版本的 `snow-v*` 标签，执行单测、Lint、R8、资源压缩、签名打包；上传签名 APK、SHA-256、源码 ZIP 和版本说明，暂不自动公开发布 Release。
 - JDK 17、仓库内 Gradle wrapper、SDK 37.0；Miuix 固定 `c36fab72391801d1e3ea5a00f966bf16bac28d4c`，应用现有公开补丁。
 - 外部 PR 不接触签名 Secrets；`pull_request_target` 未使用。上游官网 Pages 作业在此仓库禁用。
