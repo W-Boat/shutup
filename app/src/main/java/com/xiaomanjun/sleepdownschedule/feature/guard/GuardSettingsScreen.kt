@@ -1,4 +1,4 @@
-﻿package com.xiaomanjun.sleepdownschedule.feature.guard
+package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
@@ -432,6 +432,34 @@ fun GuardSettingsScreen(
                     }
                     upcoming.forEach { window ->
                         SettingsValueRow("${clock(window.start)} — ${clock(window.end)}", window.reason, compact = true)
+                    }
+                }
+            }
+        }
+        item(key = "guard-conflicts") {
+            GlassPreferenceSection("冲突预览与课表回滚") {
+                SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                    val windows = status.windows.filter { it.end > System.currentTimeMillis() }
+                    val overlaps = windows.flatMapIndexed { index, a ->
+                        windows.drop(index + 1)
+                            .filter { b -> a.ruleId != b.ruleId && a.start < b.end && b.start < a.end }
+                            .map { b -> "${a.reason} × ${b.reason}：${clock(maxOf(a.start, b.start))}" }
+                    }.distinct()
+                    if (overlaps.isEmpty()) {
+                        SettingsValueRow("无跨规则冲突", "重叠时会采用更严格的限制", compact = true)
+                    }
+                    overlaps.take(10).forEach { SettingsValueRow("重叠", it, compact = true) }
+                    SettingsActionRow(
+                        title = "恢复导入前课表",
+                        subtitle = "撤销最近一次覆盖导入，回到导入前的独立课表",
+                        buttonText = "撤销",
+                        iconRes = R.drawable.ic_snow_guard,
+                        backdrop = backdrop
+                    ) {
+                        run {
+                            withContext(Dispatchers.IO) { app.repository.undoLastGuardImport() }
+                            message = "已撤销最近一次覆盖导入，恢复为导入前的课表"
+                        }
                     }
                 }
             }
