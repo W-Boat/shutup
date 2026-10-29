@@ -75,6 +75,15 @@ class LockStore(context: Context) {
         prefs.edit().putString("month", currentMonth()).putInt("exits_used", 0).apply()
     }
 
+    /** 已经用退出机会结束过的窗口；同一节课不会再被拉回锁机。 */
+    fun exitedWindows(): Set<String> =
+        prefs.getStringSet("exited_windows", emptySet())?.toSet().orEmpty()
+
+    fun markExited(windowKey: String) {
+        val next = (exitedWindows() + windowKey).toList().takeLast(40).toSet()
+        prefs.edit().putStringSet("exited_windows", next).apply()
+    }
+
     private fun rollover() {
         val month = currentMonth()
         if (prefs.getString("month", null) != month) {

@@ -10,6 +10,11 @@ import com.xiaomanjun.sleepdownschedule.R
 import com.xiaomanjun.sleepdownschedule.domain.guard.CareStyles
 import com.xiaomanjun.sleepdownschedule.domain.guard.GuardDocument
 import com.xiaomanjun.sleepdownschedule.domain.guard.ProtectionWindow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * AI 主动关怀：课前与课中推一条有风格的小通知。
@@ -20,6 +25,7 @@ import com.xiaomanjun.sleepdownschedule.domain.guard.ProtectionWindow
 internal object GuardCare {
     const val ChannelId = "shutup_care"
     private const val Prefs = "shutup_care_state"
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -34,7 +40,8 @@ internal object GuardCare {
         )
     }
 
-    suspend fun tick(context: Context, document: GuardDocument, windows: List<ProtectionWindow>, now: Long) {
+    /** 不阻塞保护引擎：网络生成在独立协程里跑，失败立刻用离线文案兜底。 */
+    fun tick(context: Context, document: GuardDocument, windows: List<ProtectionWindow>, now: Long) {
         val care = document.care
         if (!care.enabled) return
         val prefs = context.getSharedPreferences(Prefs, Context.MODE_PRIVATE)
@@ -45,7 +52,7 @@ internal object GuardCare {
             if (!prefs.getBoolean(key, false)) {
                 prefs.edit().putBoolean(key, true).apply()
                 val minutes = ((upcoming.start - now) / 60_000L).coerceAtLeast(1)
-                post(context, care.style, document, upcoming.reason, "before", "还有 $minutes 分钟上课", now)
+                scope.launch { post(context, care.style, document, upcoming.reason, "before", "还有 $minutes 分钟上课", now) }
             }
         }
         val inside = windows.filter { it.contains(now) }.maxByOrNull { it.end }
@@ -56,7 +63,7 @@ internal object GuardCare {
                 val key = "during:${inside.ruleId}|${inside.start}|$bucket"
                 if (!prefs.getBoolean(key, false)) {
                     prefs.edit().putBoolean(key, true).apply()
-                    post(context, care.style, document, inside.reason, "during", "${inside.reason} 进行中", now)
+                    scope.launch { post(context, care.style, document, inside.reason, "during", "${inside.reason} 进行中", now) }
                 }
             }
         }
@@ -84,10 +91,12 @@ internal object GuardCare {
         ensureChannel(context)
         val note = document.care.notes[course].orEmpty()
         val prompt = CareStyles.prompt(style, course, note, phase)
-        val ai = if (document.care.customPrompt.isNotBlank()) {
-            GuardAi.composeCareNote(context, "${document.care.customPrompt.take(300)}\n$prompt")
-        } else {
-            GuardAi.composeCareNote(context, prompt)
+        val ai = withTimeoutOrNull(8_000L) {
+            if (document.care.customPrompt.isNotBlank()) {
+                GuardAi.composeCareNote(context, "${document.care.customPrompt.take(300)}\n$prompt")
+            } else {
+                GuardAi.composeCareNote(context, prompt)
+            }
         }
         val text = ai?.takeIf { it.isNotBlank() } ?: CareStyles.fallback(style, course, phase, now)
         val manager = context.getSystemService(NotificationManager::class.java) ?: return

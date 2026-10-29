@@ -365,9 +365,12 @@ class GuardService : Service() {
     private fun syncOverlay(doc: GuardDocument?) {
         val wanted = doc?.keepAliveOverlay == true &&
             (GuardEngine.status.value.title == "正在保护" || GuardEngine.status.value.title == "可信耳机放行")
-        if (wanted && !overlay.isShowing()) overlay.show()
-        if (!wanted && overlay.isShowing()) overlay.hide()
-        GuardEngine.status.value = GuardEngine.status.value.copy(overlayActive = overlay.isShowing())
+        // WindowManager.addView/removeView 需要创建窗口所在线程的消息循环：统一切主线程。
+        handler.post {
+            if (wanted && !overlay.isShowing()) overlay.show()
+            if (!wanted && overlay.isShowing()) overlay.hide()
+            GuardEngine.status.value = GuardEngine.status.value.copy(overlayActive = overlay.isShowing())
+        }
     }
 
     private fun createChannels() {

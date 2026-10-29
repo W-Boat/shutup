@@ -1,4 +1,4 @@
-﻿package com.xiaomanjun.sleepdownschedule.feature.guard
+package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import android.app.ActivityManager
 import android.content.Context
@@ -104,6 +104,7 @@ class GuardLockActivity : ComponentActivity() {
         val session = lockStore.session()
         if (lockStore.consumeExit(quota)) {
             exiting = true
+            lockStore.markExited(session.windowKey)
             lockStore.save(session.copy(active = false, decided = true, skipped = true))
             runCatching { stopLockTask() }
             Toast.makeText(this, "已使用一次退出机会，本月剩余 ${lockStore.exitsLeft(quota)} 次", Toast.LENGTH_LONG).show()
@@ -124,6 +125,12 @@ class GuardLockActivity : ComponentActivity() {
         if (!launchingAllowed && !exiting && lockStore.session().active && !isChangingConfigurations) {
             window.decorView.postDelayed({ if (!launchingAllowed && !exiting) bringBack() }, 400)
         }
+    }
+
+    private fun finishLock() {
+        exiting = true
+        runCatching { stopLockTask() }
+        finishAndRemoveTask()
     }
 
     private fun bringBack() {
@@ -148,8 +155,11 @@ private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit
         while (true) {
             now = System.currentTimeMillis()
             val session = lockStore.session()
-            if (session.active && session.endsAt in 1 until now) {
-                context.startActivity(Intent(context, SnowLeopardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val ended = session.endsAt in 1 until now
+            // 结束保护、关闭锁机开关、到期或用掉退出机会后，页面必须自己收起来，
+            // 否则用户会被一个不再属于任何会话的全屏页困住。
+            if (!session.active || ended) {
+                (context as? GuardLockActivity)?.finishLock()
                 break
             }
             delay(1_000)

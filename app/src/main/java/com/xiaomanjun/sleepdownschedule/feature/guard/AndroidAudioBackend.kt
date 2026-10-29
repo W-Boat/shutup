@@ -24,7 +24,6 @@ internal class AndroidAudioBackend(
     private val rootMode: Boolean = false
 ) : AudioBackend {
     private val audio = requireNotNull(context.getSystemService(AudioManager::class.java))
-    private var focusRequest: AudioFocusRequest? = null
 
     override fun prepare(policy: SoundPolicy?) {
         if (Build.VERSION.SDK_INT < 29) return
@@ -117,7 +116,8 @@ internal class AndroidAudioBackend(
     }
 
     override fun takeAudioFocus() {
-        val request = focusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+        // Focus must survive backend re-creation: one request per process, released explicitly.
+        val request = FocusHolder.request ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -127,14 +127,21 @@ internal class AndroidAudioBackend(
             .setWillPauseWhenDucked(false)
             .setOnAudioFocusChangeListener { }
             .build()
-            .also { focusRequest = it }
-        audio.requestAudioFocus(request)
+            .also { FocusHolder.request = it }
+        FocusHolder.granted = audio.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
     override fun abandonAudioFocus() {
-        focusRequest?.let { audio.abandonAudioFocusRequest(it) }
-        focusRequest = null
+        FocusHolder.request?.let { audio.abandonAudioFocusRequest(it) }
+        FocusHolder.request = null
+        FocusHolder.granted = false
     }
+
+    internal object FocusHolder {
+        @Volatile var request: AudioFocusRequest? = null
+        @Volatile var granted: Boolean = false
+    }
+}
 
     override fun capabilities() = CapabilityReport(listOf(
         Capability("媒体音量", !audio.isVolumeFixed, if (audio.isVolumeFixed) "系统固定音量" else "已提供音量接口；实际执行后回读"),

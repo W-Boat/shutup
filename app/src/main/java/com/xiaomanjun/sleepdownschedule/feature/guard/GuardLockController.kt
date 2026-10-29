@@ -35,6 +35,10 @@ internal object GuardLockController {
             return
         }
         val key = "${active.ruleId}|${active.start}"
+        if (key in store.exitedWindows()) {
+            if (session.active) store.clear()
+            return
+        }
         if (!session.active || session.windowKey != key) {
             store.save(
                 LockStore.Session(

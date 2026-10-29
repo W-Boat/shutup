@@ -1,4 +1,4 @@
-﻿package com.xiaomanjun.sleepdownschedule.feature.guard
+package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import android.Manifest
 import android.app.ActivityManager
@@ -80,7 +80,15 @@ internal object GuardPermissions {
                 detail = "常驻状态、保护前提醒、AI 关怀通知都依赖通知权限",
                 granted = NotificationManagerCompat.from(context).areNotificationsEnabled(),
                 actionLabel = "去开启"
-            ) { open(Settings.ACTION_APP_NOTIFICATION_SETTINGS) },
+            ) {
+                runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    )
+                }
+            },
             GuardPermission(
                 id = "dnd",
                 title = "勿扰访问",
@@ -127,8 +135,8 @@ internal object GuardPermissions {
             GuardPermission(
                 id = "autostart",
                 title = "自启动／后台运行",
-                detail = "各厂商的自启动开关位置不同，请在本应用信息页里允许后台运行",
-                granted = true,
+                detail = "各厂商的自启动开关位置不同，请在本应用信息页里允许后台运行（系统无法查询，标为需确认）",
+                granted = false,
                 actionLabel = "去设置"
             ) { open(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true) },
             GuardPermission(
@@ -181,13 +189,20 @@ internal object GuardPermissions {
 fun GuardPermissionsScreen(state: AppState, backdrop: Backdrop?) {
     val context = LocalContext.current
     val visualConfig = settingsVisualConfig(state.config)
+    // 从系统设置页返回后重新计算状态，避免「授权完了还显示未授权」。
+    var refreshTick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        refreshTick++
+    }
     val bluetoothLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { refreshTick++ }
     SleepDownSecondaryPageList(contentTopPadding = detailContentTopPadding(), contentBottomPadding = DockScrollPadding) {
         item(key = "guard-permissions") {
-            val items = GuardPermissions.items(context) {
-                if (Build.VERSION.SDK_INT >= 31) bluetoothLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            val items = androidx.compose.runtime.remember(refreshTick) {
+                GuardPermissions.items(context) {
+                    if (Build.VERSION.SDK_INT >= 31) bluetoothLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                }
             }
             GlassPreferenceSection("权限清单") {
                 SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = androidx.compose.ui.Modifier.fillMaxWidth()) {

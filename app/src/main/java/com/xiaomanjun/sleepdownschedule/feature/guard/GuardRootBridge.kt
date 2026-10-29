@@ -1,4 +1,4 @@
-package com.xiaomanjun.sleepdownschedule.feature.guard
+﻿package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import android.content.Context
 import android.util.Log
@@ -49,36 +49,42 @@ internal object GuardRootBridge {
             .apply()
     }
 
-    fun exec(command: String, timeoutMillis: Long = 4_000L): String? = runCatching {
+    internal data class RootResult(val exitCode: Int, val output: String)
+
+    /** 保留退出码：su 失败时输出可能仍非空，不能只看文本。 */
+    fun run(command: String, timeoutMillis: Long = 4_000L): RootResult? = runCatching {
         val process = ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
         if (!process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)) {
             process.destroyForcibly()
             return@runCatching null
         }
-        process.inputStream.bufferedReader().use { it.readText().trim() }
+        RootResult(process.exitValue(), process.inputStream.bufferedReader().use { it.readText().trim() })
     }.onFailure { Log.w(Tag, "root command unavailable: ${it.javaClass.simpleName}") }.getOrNull()
+
+    fun exec(command: String, timeoutMillis: Long = 4_000L): String? =
+        run(command, timeoutMillis)?.takeIf { it.exitCode == 0 }?.output
 
     /** Hard volume write; the caller re-reads AudioManager to confirm the system accepted it. */
     fun setStreamVolume(context: Context, stream: Int, index: Int): Boolean {
         if (!isAuthorized(context)) return false
-        val output = exec("cmd media_session volume --stream $stream --set $index") ?: return false
-        return Regex("""(?i)(volume is|set volume|to)\D*$index""").containsMatchIn(output) || output.isNotBlank()
+        val result = run("cmd media_session volume --stream $stream --set $index") ?: return false
+        return result.exitCode == 0
     }
 
     fun setBrightness(context: Context, value: Int): Boolean {
         if (!isAuthorized(context)) return false
-        exec("settings put system screen_brightness_mode 0")
-        return exec("settings put system screen_brightness ${value.coerceIn(0, 255)}") != null
+        run("settings put system screen_brightness_mode 0")
+        return run("settings put system screen_brightness ${value.coerceIn(0, 255)}")?.exitCode == 0
     }
 
     fun whitelistBattery(context: Context): Boolean {
         if (!isAuthorized(context)) return false
-        val output = exec("dumpsys deviceidle whitelist +${context.packageName}") ?: return false
-        return !output.contains("Unknown package", ignoreCase = true)
+        val result = run("dumpsys deviceidle whitelist +${context.packageName}") ?: return false
+        return result.exitCode == 0 && !result.output.contains("Unknown package", ignoreCase = true)
     }
 
     fun grantWriteSettings(context: Context): Boolean {
         if (!isAuthorized(context)) return false
-        return exec("appops set ${context.packageName} WRITE_SETTINGS allow") != null
+        return run("appops set ${context.packageName} WRITE_SETTINGS allow")?.exitCode == 0
     }
 }
