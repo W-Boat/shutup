@@ -137,12 +137,6 @@ internal class AndroidAudioBackend(
         FocusHolder.granted = false
     }
 
-    internal object FocusHolder {
-        @Volatile var request: AudioFocusRequest? = null
-        @Volatile var granted: Boolean = false
-    }
-}
-
     override fun capabilities() = CapabilityReport(listOf(
         Capability("媒体音量", !audio.isVolumeFixed, if (audio.isVolumeFixed) "系统固定音量" else "已提供音量接口；实际执行后回读"),
         Capability("铃声／通知", requireNotNull(context.getSystemService(NotificationManager::class.java)).isNotificationPolicyAccessGranted,
@@ -158,6 +152,12 @@ internal class AndroidAudioBackend(
         Capability("Shizuku", EnhancedAudioBridge.authorized(), "可选增强接口；不依赖 Root"),
         Capability("音量锁定", true, "自动纠正 + 可选 Root 直写；系统回调仍有毫秒级延迟")
     ))
+}
+
+/** 进程级焦点持有者：后端每次核对都会重建，但焦点只申请、释放各一次。 */
+internal object FocusHolder {
+    @Volatile var request: AudioFocusRequest? = null
+    @Volatile var granted: Boolean = false
 }
 
 internal fun currentOutput(context: Context, document: GuardDocument): RouteEvidence {
