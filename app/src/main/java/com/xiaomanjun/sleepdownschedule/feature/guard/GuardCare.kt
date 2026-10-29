@@ -63,7 +63,9 @@ internal object GuardCare {
         // 只保留最近 200 条去重键，避免偏好无限增长。
         if (prefs.all.size > 200) {
             val keep = prefs.all.entries.sortedByDescending { it.key }.take(120).associate { it.key to it.value }
-            prefs.edit().clear().apply { keep.forEach { (k, v) -> putBoolean(k, v as Boolean) } }.apply()
+            val editor = prefs.edit().clear()
+            keep.forEach { (key, value) -> editor.putBoolean(key, value as Boolean) }
+            editor.apply()
         }
     }
 
