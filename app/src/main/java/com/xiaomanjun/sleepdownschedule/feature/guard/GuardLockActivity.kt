@@ -1,0 +1,243 @@
+﻿package com.xiaomanjun.sleepdownschedule.feature.guard
+
+import android.app.ActivityManager
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import android.view.WindowManager
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.xiaomanjun.sleepdownschedule.CourseScheduleTheme
+import com.xiaomanjun.sleepdownschedule.data.guard.GuardStore
+import com.xiaomanjun.sleepdownschedule.data.guard.LockStore
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockQuotes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+/**
+ * 上课锁机页面：只用 Miuix 组件（Card / Text / Button / TextButton），保持极简与平静。
+ *
+ * 防退出是分层的：锁任务（可用时）→ 返回键拦截 → 离开界面后自动拉回 → 无障碍服务把非白名单
+ * 应用切回本页。全部失效时仍可用「每月 3 次」的退出配额，保证紧急情况能出去。
+ */
+class GuardLockActivity : ComponentActivity() {
+    private val lockStore by lazy { LockStore(this) }
+    @Volatile private var launchingAllowed = false
+    @Volatile private var exiting = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                Toast.makeText(this@GuardLockActivity, "锁机中，先完成这一节", Toast.LENGTH_SHORT).show()
+            }
+        })
+        tryKiosk()
+        setContent {
+            CourseScheduleTheme {
+                MiuixTheme {
+                    GuardLockContent(
+                        onOpenAllowed = { packageName -> openAllowedApp(packageName) },
+                        onExit = { requestExit() },
+                        onStay = { Toast.makeText(this, "很好，继续。", Toast.LENGTH_SHORT).show() }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun tryKiosk() {
+        runCatching {
+            val manager = getSystemService(ActivityManager::class.java)
+            if (manager?.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) startLockTask()
+        }
+    }
+
+    private fun openAllowedApp(packageName: String) {
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return
+        launchingAllowed = true
+        runCatching { startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        // Returning to the lock page is enforced again once the allowed app is left.
+        window.decorView.postDelayed({ launchingAllowed = false }, 1_500)
+    }
+
+    private fun requestExit() {
+        val document = kotlinx.coroutines.runBlocking { withContext(Dispatchers.IO) { GuardStore(this@GuardLockActivity).document.first() } }
+        val quota = document.lock.safeQuota
+        val session = lockStore.session()
+        if (lockStore.consumeExit(quota)) {
+            exiting = true
+            lockStore.save(session.copy(active = false, decided = true, skipped = true))
+            runCatching { stopLockTask() }
+            Toast.makeText(this, "已使用一次退出机会，本月剩余 ${lockStore.exitsLeft(quota)} 次", Toast.LENGTH_LONG).show()
+            finishAndRemoveTask()
+            startActivity(Intent(this, SnowLeopardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } else {
+            Toast.makeText(this, "本月 3 次直接退出已用完，请继续这一节课", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (!launchingAllowed && !exiting) bringBack()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!launchingAllowed && !exiting && lockStore.session().active && !isChangingConfigurations) {
+            window.decorView.postDelayed({ if (!launchingAllowed && !exiting) bringBack() }, 400)
+        }
+    }
+
+    private fun bringBack() {
+        val manager = getSystemService(ActivityManager::class.java) ?: return
+        manager.appTasks.firstOrNull()?.moveToFront()
+    }
+
+    companion object {
+        fun intent(context: Context): Intent =
+            Intent(context, GuardLockActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    }
+}
+
+@Composable
+private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit, onStay: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lockStore = remember { LockStore(context) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var message by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            val session = lockStore.session()
+            if (session.active && session.endsAt in 1 until now) {
+                context.startActivity(Intent(context, SnowLeopardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                break
+            }
+            delay(1_000)
+        }
+    }
+    val session = lockStore.session()
+    val remaining = ((session.endsAt - now) / 1000L).coerceAtLeast(0)
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        MiuixText(
+            text = session.courseName.ifBlank { "专注时段" },
+            fontSize = 26.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
+        )
+        MiuixText(
+            text = "锁机中 · 还剩 ${formatRemaining(remaining)}",
+            fontSize = 15.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Card(Modifier.fillMaxWidth().wrapContentHeight(), insideMargin = PaddingValues(20.dp)) {
+            MiuixText(
+                text = LockQuotes.quote(
+                    settings = kotlinx.coroutines.runBlocking {
+                        withContext(Dispatchers.IO) { GuardStore(context).document.first().lock }
+                    },
+                    seed = now
+                ),
+                fontSize = 18.sp,
+                lineHeight = 28.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
+            )
+        }
+        val allowed = remember(session.windowKey) { allowedApps(context) }
+        if (allowed.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+                MiuixText("白名单应用", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    allowed.forEach { (pkg, label) ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            MiuixText(label, fontSize = 15.sp, modifier = Modifier.align(Alignment.CenterVertically))
+                            TextButton(text = "打开", onClick = { onOpenAllowed(pkg) }, minHeight = 34.dp)
+                        }
+                    }
+                }
+            }
+        }
+        val quota = kotlinx.coroutines.runBlocking {
+            withContext(Dispatchers.IO) { GuardStore(context).document.first().lock.safeQuota }
+        }
+        val left = lockStore.exitsLeft(quota)
+        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+            MiuixText(
+                text = "本月直接退出机会：$left / $quota",
+                fontSize = 14.sp,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+            )
+            Button(onClick = onExit, modifier = Modifier.fillMaxWidth(), minHeight = 46.dp) {
+                MiuixText(if (left > 0) "使用一次退出机会" else "本月机会已用完", fontSize = 16.sp)
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.Center) {
+                TextButton(text = "继续学习", onClick = onStay)
+            }
+        }
+        message?.let { MiuixText(it, fontSize = 13.sp, modifier = Modifier.fillMaxWidth()) }
+    }
+}
+
+private fun formatRemaining(seconds: Long): String {
+    val m = seconds / 60
+    val s = seconds % 60
+    return "%02d:%02d".format(m, s)
+}
+
+private fun allowedApps(context: Context): List<Pair<String, String>> = runCatching {
+    val document = kotlinx.coroutines.runBlocking {
+        withContext(Dispatchers.IO) { GuardStore(context).document.first() }
+    }
+    document.lock.allowedPackages.mapNotNull { pkg ->
+        runCatching {
+            val info = context.packageManager.getApplicationInfo(pkg, 0)
+            pkg to context.packageManager.getApplicationLabel(info).toString()
+        }.getOrNull()
+    }
+}.getOrDefault(emptyList())

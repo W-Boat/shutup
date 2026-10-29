@@ -1,4 +1,4 @@
-﻿package com.xiaomanjun.sleepdownschedule.feature.guard
+package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import android.content.Context
 import com.xiaomanjun.sleepdownschedule.data.guard.*
@@ -95,6 +95,22 @@ internal object GuardAi {
         request(settings, listOf(GuardChatMessage("user", "Reply with OK.")))
         return "文本连接成功；图片能力需用实际课表图片测试"
     }
+
+    /**
+     * 主动关怀通知的一句话文案。AI 未配置或调用失败时返回 null，由本地模板兜底。
+     */
+    suspend fun composeCareNote(context: Context, prompt: String): String? = runCatching {
+        val settings = AiImportSettingsStore.load(context)
+        if (!settings.hasCredentialConfiguration()) return null
+        val text = request(
+            settings,
+            listOf(
+                GuardChatMessage("system", "你是学生手机里的学习搭子，只说一句不超过 40 个字的中文提醒，不要引号、不要解释、不要换行。"),
+                GuardChatMessage("user", prompt.take(600))
+            )
+        )
+        text.trim().replace('\n', ' ').take(60).ifBlank { null }
+    }.getOrNull()
 
     private suspend fun request(settings: AiImportSettings, messages: List<GuardChatMessage>): String = withContext(Dispatchers.IO) {
         val config = settings.toProviderConfig().normalizedForRequest()

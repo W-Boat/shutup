@@ -97,7 +97,11 @@ data class GuardDocument(
     /** Publish guard state to Live Updates / Xiaomi focus island. */
     val liveActivity: Boolean = true,
     /** Seconds between the pre-protection reminder and the actual mute; 0 disables it. */
-    val preReminderSeconds: Int = 10
+    val preReminderSeconds: Int = 10,
+    /** 上课锁机 */
+    val lock: LockSettings = LockSettings(),
+    /** AI 主动关怀通知 */
+    val care: CareSettings = CareSettings()
 ) {
     val templates: List<GuardTemplate> get() = GuardTemplates.builtIns + customTemplates
     fun validate() {
@@ -107,6 +111,8 @@ data class GuardDocument(
         require(templates.map { it.id }.distinct().size == templates.size) { "模板编号重复" }
         require(rules.map { it.id }.distinct().size == rules.size) { "规则编号重复" }
         require(preReminderSeconds in 0..120) { "保护前提醒应在 0—120 秒之间" }
+        lock.validate()
+        care.validate()
         templates.forEach { it.policy.validate() }
         rules.forEach { it.validate(templates) }
         require(selectedTemplateId == null || templates.any { it.id == selectedTemplateId }) { "所选模板不存在" }

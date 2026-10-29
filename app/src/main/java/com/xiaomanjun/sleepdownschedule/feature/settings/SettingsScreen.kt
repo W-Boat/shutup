@@ -387,6 +387,21 @@ private fun SettingsPageContent(
         SettingsPage.Root -> SettingsRootScreen(pageState, backdrop, onPageChange = onPageChange)
         SettingsPage.Guard -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardSettingsScreen(
             state = state,
+            backdrop = backdrop,
+            onOpenPermissions = { onPageChange(SettingsPage.GuardPermissions) },
+            onOpenLock = { onPageChange(SettingsPage.GuardLock) },
+            onOpenDevices = { onPageChange(SettingsPage.GuardDevices) }
+        )
+        SettingsPage.GuardPermissions -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardPermissionsScreen(
+            state = state,
+            backdrop = backdrop
+        )
+        SettingsPage.GuardLock -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardLockScreen(
+            state = state,
+            backdrop = backdrop
+        )
+        SettingsPage.GuardDevices -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardDevicesScreen(
+            state = state,
             backdrop = backdrop
         )
         SettingsPage.General -> GeneralSettingsScreen(

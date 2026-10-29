@@ -107,6 +107,8 @@ internal object GuardEngine {
             val reminderAt = reminderTarget(document, now)
             schedule(context, minOf(boundary, reminderAt))
             maybeRemind(context, document, now)
+            GuardLockController.tick(context, document, windows, now)
+            GuardCare.tick(context, document, windows, now)
             val endAt = maxOf(document.manualUntil, activeWindows.maxOfOrNull { it.end } ?: 0L).takeIf { it > now }
             val result = GuardStatus(
                 title = title,
@@ -142,12 +144,14 @@ internal object GuardEngine {
     }
 
     private fun reminderTarget(document: GuardDocument, now: Long): Long {
+        val candidates = mutableListOf<Long>()
         val lead = document.preReminderSeconds * 1000L
-        if (lead <= 0) return Long.MAX_VALUE
-        return windows.asSequence()
-            .map { it.start - lead }
-            .filter { it > now }
-            .minOrNull() ?: Long.MAX_VALUE
+        if (lead > 0) windows.asSequence().map { it.start - lead }.filter { it > now }.minOrNull()?.let { candidates += it }
+        val careLead = document.care.safeLeadMinutes * 60_000L
+        if (document.care.enabled && careLead > 0) {
+            windows.asSequence().map { it.start - careLead }.filter { it > now }.minOrNull()?.let { candidates += it }
+        }
+        return candidates.minOrNull() ?: Long.MAX_VALUE
     }
 
     private fun maybeRemind(context: Context, document: GuardDocument, now: Long) {
@@ -284,6 +288,7 @@ class GuardService : Service() {
         super.onCreate()
         createChannels()
         GuardReminder.ensureChannel(this)
+        GuardCare.ensureChannel(this)
         GuardShortcuts.publish(this)
         startAsForeground(notification(GuardEngine.status.value))
         GuardEngine.running = true
@@ -336,6 +341,8 @@ class GuardService : Service() {
                 when (val action = intent?.action) {
                     null, "reconcile" -> Unit
                     "toggle" -> GuardEngine.toggle(this@GuardService)
+                    "lock_start" -> GuardLockController.decide(this@GuardService, true)
+                    "lock_skip" -> GuardLockController.decide(this@GuardService, false)
                     else -> GuardEngine.command(this@GuardService, action)
                 }
             } catch (e: Exception) {

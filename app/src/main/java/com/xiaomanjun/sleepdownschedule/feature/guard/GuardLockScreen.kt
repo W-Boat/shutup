@@ -1,0 +1,356 @@
+package com.xiaomanjun.sleepdownschedule.feature.guard
+
+import android.content.pm.PackageManager
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.kyant.backdrop.Backdrop
+import com.xiaomanjun.sleepdownschedule.AppState
+import com.xiaomanjun.sleepdownschedule.R
+import com.xiaomanjun.sleepdownschedule.core.ui.chrome.DockScrollPadding
+import com.xiaomanjun.sleepdownschedule.core.ui.designsystem.SleepDownSecondaryPageList
+import com.xiaomanjun.sleepdownschedule.core.ui.scaffold.detailContentTopPadding
+import com.xiaomanjun.sleepdownschedule.core.ui.scaffold.settingsVisualConfig
+import com.xiaomanjun.sleepdownschedule.core.ui.settings.GlassPreferenceSection
+import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsActionButton
+import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsActionRow
+import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsGroup
+import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsInfoRow
+import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsTextFieldRow
+import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsToggleRow
+import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsValueRow
+import com.xiaomanjun.sleepdownschedule.data.guard.GuardStore
+import com.xiaomanjun.sleepdownschedule.data.guard.LockStore
+import com.xiaomanjun.sleepdownschedule.domain.guard.CareStyles
+import com.xiaomanjun.sleepdownschedule.domain.guard.GuardDocument
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockQuotes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.Slider
+
+/**
+ * 上课锁机 + AI 关怀的设置页。控件全部来自 Miuix 设计系统（Slider 直接使用 Miuix 实现，
+ * 其余开关/行/输入框复用仓库既有 Miuix 封装）。
+ */
+@Composable
+fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val store = remember { GuardStore(context) }
+    val lockStore = remember { LockStore(context) }
+    val visualConfig = settingsVisualConfig(state.config)
+    var document by remember { mutableStateOf<GuardDocument?>(null) }
+    val status by GuardEngine.status.collectAsState()
+    var message by remember { mutableStateOf<String?>(null) }
+    var showAllApps by remember { mutableStateOf(false) }
+    var noteCourse by remember { mutableStateOf("") }
+
+    fun run(action: suspend () -> Unit) = scope.launch {
+        try { action() } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            message = e.message ?: "操作失败"
+        }
+    }
+    fun mutate(transform: (GuardDocument) -> GuardDocument) = run {
+        withContext(Dispatchers.IO) { store.update(transform) }
+        GuardEngine.start(context)
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        store.document.collect { document = it }
+    }
+
+    SleepDownSecondaryPageList(contentTopPadding = detailContentTopPadding(), contentBottomPadding = DockScrollPadding) {
+        item(key = "lock-main") {
+            val doc = document
+            GlassPreferenceSection("上课锁机") {
+                SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                    if (doc == null) {
+                        SettingsValueRow("读取中", "正在载入锁机配置…", compact = true)
+                    } else {
+                        val lock = doc.lock
+                        SettingsToggleRow(
+                            title = "启用锁机",
+                            subtitle = "上课后先给一段决定时间，超时自动进入锁机页面",
+                            checked = lock.enabled,
+                            backdrop = backdrop,
+                            onCheckedChange = { value -> mutate { it.copy(lock = it.lock.copy(enabled = value)) } }
+                        )
+                        SettingsValueRow(
+                            "决定时间",
+                            "${lock.safeGraceSeconds} 秒（${lock.safeGraceSeconds / 60} 分 ${lock.safeGraceSeconds % 60} 秒）",
+                            compact = true
+                        )
+                        Slider(
+                            value = lock.safeGraceSeconds.toFloat(),
+                            onValueChange = { value ->
+                                mutate { it.copy(lock = it.lock.copy(graceSeconds = value.toInt().coerceIn(30, 900))) }
+                            },
+                            valueRange = 30f..300f,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)
+                        )
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(60, 120, 180, 300).forEach { seconds ->
+                                SettingsActionButton(
+                                    label = if (seconds >= 60) "${seconds / 60} 分钟" else "$seconds 秒",
+                                    backdrop = backdrop,
+                                    onClick = { mutate { it.copy(lock = it.lock.copy(graceSeconds = seconds)) } },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = lock.safeGraceSeconds != seconds
+                                )
+                            }
+                        }
+                        SettingsToggleRow(
+                            title = "超时自动锁机",
+                            subtitle = "关闭后必须在决定时间内手动点「开始锁机」",
+                            checked = lock.autoLockOnTimeout,
+                            backdrop = backdrop,
+                            onCheckedChange = { value -> mutate { it.copy(lock = it.lock.copy(autoLockOnTimeout = value)) } }
+                        )
+                        SettingsValueRow(
+                            "本月退出机会",
+                            "剩余 ${lockStore.exitsLeft(lock.safeQuota)} / ${lock.safeQuota} 次",
+                            compact = true
+                        )
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(2, 3, 5).forEach { quota ->
+                                SettingsActionButton(
+                                    label = "每月 $quota 次",
+                                    backdrop = backdrop,
+                                    onClick = { mutate { it.copy(lock = it.lock.copy(monthlyExitQuota = quota)) } },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = lock.safeQuota != quota
+                                )
+                            }
+                        }
+                        SettingsActionRow(
+                            title = "重置本月额度",
+                            subtitle = "手动恢复为购买时的 3 次（仅重置计数，不改变配置）",
+                            buttonText = "重置",
+                            iconRes = R.drawable.ic_snow_guard,
+                            backdrop = backdrop
+                        ) { run { withContext(Dispatchers.IO) { lockStore.resetExits() }; message = "已重置本月退出次数" } }
+                        SettingsActionRow(
+                            title = "锁机权限",
+                            subtitle = "无障碍、使用情况、悬浮窗、精确闹钟等，逐项授权",
+                            buttonText = "去授权",
+                            iconRes = R.drawable.ic_snow_guard,
+                            backdrop = backdrop
+                        ) { message = "请返回保护页打开「权限管理」" }
+                    }
+                }
+            }
+        }
+        item(key = "lock-quotes") {
+            document?.let { doc ->
+                GlassPreferenceSection("静心句子") {
+                    SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                        SettingsInfoRow("锁机页显示一句督促学习的话", "选一个语料包，或写一句自己的话。")
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            LockQuotes.packs.forEach { (id, label) ->
+                                SettingsActionButton(
+                                    label = label,
+                                    backdrop = backdrop,
+                                    onClick = { mutate { it.copy(lock = it.lock.copy(quotePack = id)) } },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = doc.lock.quotePack != id
+                                )
+                            }
+                        }
+                        SettingsTextFieldRow(
+                            title = "自定义句子",
+                            value = doc.lock.customQuote,
+                            onValueChange = { value -> mutate { it.copy(lock = it.lock.copy(customQuote = value.take(200))) } },
+                            placeholder = "留空则使用语料包"
+                        )
+                    }
+                }
+            }
+        }
+        item(key = "lock-whitelist") {
+            document?.let { doc ->
+                GlassPreferenceSection("白名单应用") {
+                    SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                        SettingsInfoRow(
+                            title = "锁机时仍然可以打开的应用",
+                            body = "建议只放学习类应用（词典、笔记、网课）。微信、短视频等不放进来才有效果。",
+                            badgeText = "${doc.lock.allowedPackages.size} 个"
+                        )
+                        SettingsActionRow(
+                            title = if (showAllApps) "收起应用列表" else "选择应用",
+                            subtitle = "读取已安装且可启动的应用",
+                            buttonText = if (showAllApps) "收起" else "展开",
+                            iconRes = R.drawable.ic_snow_guard,
+                            backdrop = backdrop
+                        ) { showAllApps = !showAllApps }
+                        if (showAllApps) {
+                            val apps = remember(showAllApps) { launchableApps(context) }
+                            apps.take(40).forEach { (pkg, label) ->
+                                SettingsToggleRow(
+                                    title = label,
+                                    subtitle = pkg,
+                                    checked = pkg in doc.lock.allowedPackages,
+                                    backdrop = backdrop,
+                                    onCheckedChange = { value ->
+                                        mutate { current ->
+                                            val next = if (value) current.lock.allowedPackages + pkg
+                                            else current.lock.allowedPackages - pkg
+                                            current.copy(lock = current.lock.copy(allowedPackages = next.distinct().take(60)))
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item(key = "care-main") {
+            document?.let { doc ->
+                val care = doc.care
+                GlassPreferenceSection("AI 主动关怀") {
+                    SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                        SettingsToggleRow(
+                            title = "课前与课中提醒",
+                            subtitle = "按课程名与你写的吐槽生成一句小提醒；未配置 AI 时使用内置风格文案",
+                            checked = care.enabled,
+                            backdrop = backdrop,
+                            onCheckedChange = { value -> mutate { it.copy(care = it.care.copy(enabled = value)) } }
+                        )
+                        SettingsValueRow("课前提醒", "提前 ${care.safeLeadMinutes} 分钟", compact = true)
+                        Slider(
+                            value = care.safeLeadMinutes.toFloat(),
+                            onValueChange = { value -> mutate { it.copy(care = it.care.copy(leadMinutes = value.toInt().coerceIn(0, 60))) } },
+                            valueRange = 0f..60f,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)
+                        )
+                        SettingsToggleRow(
+                            title = "课中也提醒",
+                            subtitle = "每隔一段时间根据课程内容再提醒一次",
+                            checked = care.duringClass,
+                            backdrop = backdrop,
+                            onCheckedChange = { value -> mutate { it.copy(care = it.care.copy(duringClass = value)) } }
+                        )
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(15, 25, 40).forEach { minutes ->
+                                SettingsActionButton(
+                                    label = "$minutes 分钟",
+                                    backdrop = backdrop,
+                                    onClick = { mutate { it.copy(care = it.care.copy(duringClassEveryMinutes = minutes)) } },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = care.safeEveryMinutes != minutes
+                                )
+                            }
+                        }
+                        SettingsValueRow("文案风格", CareStyles.label(care.style), compact = true)
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CareStyles.labels.forEach { (id, label) ->
+                                SettingsActionButton(
+                                    label = label,
+                                    backdrop = backdrop,
+                                    onClick = { mutate { it.copy(care = it.care.copy(style = id)) } },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = care.style != id
+                                )
+                            }
+                        }
+                        SettingsTextFieldRow(
+                            title = "自定义提示词",
+                            value = care.customPrompt,
+                            onValueChange = { value -> mutate { it.copy(care = it.care.copy(customPrompt = value.take(300))) } },
+                            placeholder = "例如：用我家猫的口吻提醒我"
+                        )
+                    }
+                }
+            }
+        }
+        item(key = "care-notes") {
+            document?.let { doc ->
+                GlassPreferenceSection("课程吐槽") {
+                    SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                        SettingsInfoRow(
+                            title = "给每门课写一句吐槽",
+                            body = "AI 会把它写进提醒里，让通知更像你自己说话。例如「这老师点名超狠」。"
+                        )
+                        val courses = status.windows.map { it.reason }.distinct().take(12)
+                        if (courses.isEmpty()) {
+                            SettingsValueRow("暂无课程", "等课表生成保护时段后会自动出现在这里", compact = true)
+                        }
+                        courses.forEach { course ->
+                            SettingsTextFieldRow(
+                                title = course,
+                                value = doc.care.notes[course].orEmpty(),
+                                onValueChange = { value ->
+                                    mutate { current ->
+                                        current.copy(care = current.care.copy(notes = current.care.notes + (course to value.take(120))))
+                                    }
+                                },
+                                placeholder = "写一句吐槽"
+                            )
+                        }
+                        if (noteCourse.isNotBlank()) SettingsValueRow("正在编辑", noteCourse, compact = true)
+                    }
+                }
+            }
+        }
+        item(key = "lock-message") {
+            if (message != null) {
+                GlassPreferenceSection("提示") {
+                    SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                        SettingsInfoRow("最近一次操作", message.orEmpty())
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
+                            SettingsActionButton(
+                                label = "知道了",
+                                backdrop = backdrop,
+                                onClick = { message = null },
+                                modifier = Modifier.weight(1f),
+                                monochrome = true
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun launchableApps(context: android.content.Context): List<Pair<String, String>> {
+    val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+    return runCatching {
+        context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
+            .mapNotNull { info ->
+                val pkg = info.activityInfo?.packageName ?: return@mapNotNull null
+                if (pkg == context.packageName) return@mapNotNull null
+                pkg to info.loadLabel(context.packageManager).toString()
+            }
+            .distinctBy { it.first }
+            .sortedBy { it.second }
+    }.getOrDefault(emptyList())
+}

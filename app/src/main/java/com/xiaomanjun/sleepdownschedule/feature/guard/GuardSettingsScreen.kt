@@ -1,16 +1,19 @@
-package com.xiaomanjun.sleepdownschedule.feature.guard
+﻿package com.xiaomanjun.sleepdownschedule.feature.guard
 
+import android.Manifest
+import android.bluetooth.BluetoothManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,13 +24,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.kyant.backdrop.Backdrop
 import com.xiaomanjun.sleepdownschedule.AppState
 import com.xiaomanjun.sleepdownschedule.CourseScheduleApp
+import com.xiaomanjun.sleepdownschedule.R
 import com.xiaomanjun.sleepdownschedule.core.ui.chrome.DockScrollPadding
 import com.xiaomanjun.sleepdownschedule.core.ui.designsystem.SleepDownSecondaryPageList
 import com.xiaomanjun.sleepdownschedule.core.ui.scaffold.detailContentTopPadding
@@ -42,10 +46,14 @@ import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsToggleRow
 import com.xiaomanjun.sleepdownschedule.core.ui.settings.SettingsValueRow
 import com.xiaomanjun.sleepdownschedule.data.guard.GuardDatabase
 import com.xiaomanjun.sleepdownschedule.data.guard.GuardStore
+import com.xiaomanjun.sleepdownschedule.domain.guard.AlarmPolicy
 import com.xiaomanjun.sleepdownschedule.domain.guard.GuardDocument
 import com.xiaomanjun.sleepdownschedule.domain.guard.GuardRule
 import com.xiaomanjun.sleepdownschedule.domain.guard.GuardTemplate
+import com.xiaomanjun.sleepdownschedule.domain.guard.RingPolicy
+import com.xiaomanjun.sleepdownschedule.domain.guard.SoundPolicy
 import com.xiaomanjun.sleepdownschedule.domain.guard.Trigger
+import com.xiaomanjun.sleepdownschedule.domain.guard.TrustedDevice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -56,15 +64,21 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 /**
- * The single sound-protection page of ShutUp 课程表. It lives in the course-table navigation, so
- * protection and timetable share one process, one theme and one back stack.
+ * The single sound-protection page of ShutUp 课程表.
+ *
+ * Every row here comes from the shared Miuix-backed settings design system
+ * (`GlassPreferenceSection` / `SettingsGroup` / `SettingsToggleRow` / `SettingsActionRow` /
+ * `SettingsNavigationRow`); no bespoke card or switch is defined on this page.
  */
 @Composable
 fun GuardSettingsScreen(
     state: AppState,
     backdrop: Backdrop?,
     highlightAction: String? = null,
-    onActionConsumed: () -> Unit = {}
+    onActionConsumed: () -> Unit = {},
+    onOpenPermissions: () -> Unit = {},
+    onOpenLock: () -> Unit = {},
+    onOpenDevices: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as CourseScheduleApp
@@ -81,16 +95,19 @@ fun GuardSettingsScreen(
     val visualConfig = settingsVisualConfig(state.config)
 
     fun run(action: suspend () -> Unit) = scope.launch {
-        try { action() } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; message = e.message ?: "操作失败" }
+        try { action() } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            message = e.message ?: "操作失败"
+        }
     }
     fun mutate(transform: (GuardDocument) -> GuardDocument) = run {
-        store.update(transform)
+        withContext(Dispatchers.IO) { store.update(transform) }
         GuardEngine.start(context)
     }
     fun command(action: String) = run {
-        GuardEngine.command(context, action)
+        withContext(Dispatchers.IO) { GuardEngine.command(context, action) }
         GuardEngine.start(context)
-        GuardEngine.reconcile(context, true)
+        withContext(Dispatchers.IO) { GuardEngine.reconcile(context, true) }
     }
 
     LaunchedEffect(Unit) {
@@ -103,7 +120,7 @@ fun GuardSettingsScreen(
         run {
             val doc = withContext(Dispatchers.IO) { store.document.first() }
             if (doc.rules.any { it.enabled } || doc.manualUntil > System.currentTimeMillis()) GuardEngine.start(context)
-            else withContext(Dispatchers.IO) { GuardEngine.reconcile(context, true) }
+            withContext(Dispatchers.IO) { GuardEngine.reconcile(context, true) }
         }
     }
     LaunchedEffect(highlightAction) {
@@ -123,9 +140,13 @@ fun GuardSettingsScreen(
                             status.endAt?.let { append("\n本次结束 ").append(clock(it)) }
                             status.next?.let { append(" · 下次核对 ").append(clock(it)) }
                             status.errors.forEach { append("\n⚠ ").append(it) }
-                        }
+                        },
+                        badgeText = status.templateName.takeIf { it.isNotBlank() }
                     )
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         SettingsActionButton(
                             label = if (protecting) "结束保护" else "开始保护",
                             backdrop = backdrop,
@@ -140,7 +161,29 @@ fun GuardSettingsScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    SettingsValueRow("当前模板", status.templateName, compact = true)
+                    SettingsValueRow("最近一次核对", if (status.updated == 0L) "尚未执行" else clock(status.updated), compact = true)
+                }
+            }
+        }
+        item(key = "guard-shortcuts") {
+            GlassPreferenceSection("快捷入口") {
+                SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                    SettingsNavigationRow(
+                        "权限管理",
+                        subtitle = "通知、勿扰、精确闹钟、悬浮窗、无障碍、使用情况、Root／Shizuku",
+                        badgeText = GuardPermissions.summaryBadge(context),
+                        onClick = onOpenPermissions
+                    )
+                    SettingsNavigationRow(
+                        "上课锁机",
+                        subtitle = "上课后限时决定是否锁机，白名单放行，每月 3 次直接退出",
+                        onClick = onOpenLock
+                    )
+                    SettingsNavigationRow(
+                        "可信蓝牙设备",
+                        subtitle = "可信耳机输出时允许放行媒体音量",
+                        onClick = onOpenDevices
+                    )
                 }
             }
         }
@@ -156,7 +199,10 @@ fun GuardSettingsScreen(
                             onCheckedChange = { enabled -> mutate { it.copy(preReminderSeconds = if (enabled) 10 else 0) } }
                         )
                         if (doc.preReminderSeconds > 0) {
-                            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 listOf(5, 10, 30).forEach { seconds ->
                                     SettingsActionButton(
                                         label = "$seconds 秒",
@@ -171,7 +217,7 @@ fun GuardSettingsScreen(
                                 title = "试一次提醒",
                                 subtitle = "立即弹出一条示例提醒，确认通知权限与声音策略",
                                 buttonText = "预览",
-                                iconRes = com.xiaomanjun.sleepdownschedule.R.drawable.ic_snow_guard,
+                                iconRes = R.drawable.ic_snow_guard,
                                 backdrop = backdrop
                             ) { command("preview") }
                         }
@@ -192,13 +238,16 @@ fun GuardSettingsScreen(
                         )
                         SettingsToggleRow(
                             title = "1px 悬浮窗保活",
-                            subtitle = if (Settings.canDrawOverlays(context)) "保护期间维持一个不可见、不可触的 1×1 窗口，降低被系统冻结的概率"
+                            subtitle = if (Settings.canDrawOverlays(context))
+                                "保护期间维持一个不可见、不可触的 1×1 窗口，降低被系统冻结的概率"
                             else "需要“显示在其他应用上层”权限",
                             checked = doc.keepAliveOverlay,
                             backdrop = backdrop,
                             onCheckedChange = { value ->
                                 if (value && !Settings.canDrawOverlays(context)) {
-                                    openSettings(context, Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true) { message = "系统未提供悬浮窗权限入口" }
+                                    openSettings(context, Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true) {
+                                        message = "系统未提供悬浮窗权限入口"
+                                    }
                                 } else mutate { it.copy(keepAliveOverlay = value) }
                             }
                         )
@@ -206,16 +255,24 @@ fun GuardSettingsScreen(
                             title = "电池与自启动",
                             subtitle = "允许后台、忽略电池优化、允许自启动，可显著减少切到后台后保护失效",
                             buttonText = "去设置",
-                            iconRes = com.xiaomanjun.sleepdownschedule.R.drawable.ic_snow_guard,
+                            iconRes = R.drawable.ic_snow_guard,
                             backdrop = backdrop
-                        ) { openSettings(context, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true) { message = "系统未提供应用设置入口" } }
+                        ) {
+                            openSettings(context, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true) {
+                                message = "系统未提供应用设置入口"
+                            }
+                        }
                         SettingsActionRow(
                             title = "修改系统设置",
                             subtitle = "亮度控制需要该权限；未授权时亮度上限不会生效",
                             buttonText = "授权",
-                            iconRes = com.xiaomanjun.sleepdownschedule.R.drawable.ic_snow_guard,
+                            iconRes = R.drawable.ic_snow_guard,
                             backdrop = backdrop
-                        ) { openSettings(context, Settings.ACTION_MANAGE_WRITE_SETTINGS, true) { message = "系统未提供该权限入口" } }
+                        ) {
+                            openSettings(context, Settings.ACTION_MANAGE_WRITE_SETTINGS, true) {
+                                message = "系统未提供该权限入口"
+                            }
+                        }
                     }
                 }
             }
@@ -226,7 +283,8 @@ fun GuardSettingsScreen(
                     SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
                         SettingsToggleRow(
                             title = "Root 模式",
-                            subtitle = if (GuardRootBridge.isAuthorized(context)) "su 已授权：音量与亮度系统直写，自动加入电池白名单"
+                            subtitle = if (GuardRootBridge.isAuthorized(context))
+                                "su 已授权：音量与亮度系统直写，自动加入电池白名单"
                             else "开启后请求 su；未授权时自动降级普通控制",
                             checked = doc.rootMode,
                             backdrop = backdrop,
@@ -237,16 +295,30 @@ fun GuardSettingsScreen(
                                     val granted = withContext(Dispatchers.IO) { GuardRootBridge.requestAuthorization(context) }
                                     rootBusy = false
                                     message = if (granted) "Root 已授权" else "su 未授权，已保持普通控制"
-                                    if (granted) {
-                                        withContext(Dispatchers.IO) {
-                                            GuardRootBridge.grantWriteSettings(context)
-                                            GuardRootBridge.whitelistBattery(context)
-                                        }
+                                    if (granted) withContext(Dispatchers.IO) {
+                                        GuardRootBridge.grantWriteSettings(context)
+                                        GuardRootBridge.whitelistBattery(context)
                                     }
                                 }
                             }
                         )
                         if (rootBusy) SettingsValueRow("Root", "正在等待超级用户授权…", compact = true)
+                        if (GuardRootBridge.isAuthorized(context)) {
+                            SettingsActionRow(
+                                title = "Root 已授权",
+                                subtitle = "重新写入电池白名单并允许修改系统设置",
+                                buttonText = "重新同步",
+                                iconRes = R.drawable.ic_snow_guard,
+                                backdrop = backdrop
+                            ) {
+                                run {
+                                    val ok = withContext(Dispatchers.IO) {
+                                        GuardRootBridge.whitelistBattery(context) || GuardRootBridge.grantWriteSettings(context)
+                                    }
+                                    message = if (ok) "已同步 Root 权限" else "su 调用失败，请检查授权"
+                                }
+                            }
+                        }
                         SettingsToggleRow(
                             title = "使用 Shizuku（可选）",
                             subtitle = "与 Root 二选一即可；用于增强路由核对与媒体音量写入",
@@ -265,20 +337,39 @@ fun GuardSettingsScreen(
             document?.let { doc ->
                 GlassPreferenceSection("固定模板") {
                     doc.templates.forEach { template ->
-                        SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                        SettingsGroup(
+                            backdrop = backdrop,
+                            config = visualConfig,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                        ) {
                             SettingsInfoRow(
                                 title = template.name + if (doc.selectedTemplateId == template.id) " · 已选择" else "",
                                 body = policySummary(template.policy)
                             )
-                            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                SettingsActionButton("选用", backdrop, { mutate { it.copy(selectedTemplateId = template.id) } }, Modifier.weight(1f), monochrome = doc.selectedTemplateId != template.id)
-                                SettingsActionButton("编辑", backdrop, { editingTemplate = template }, Modifier.weight(1f), monochrome = true)
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                SettingsActionButton(
+                                    label = "选用",
+                                    backdrop = backdrop,
+                                    onClick = { mutate { it.copy(selectedTemplateId = template.id) } },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = doc.selectedTemplateId != template.id
+                                )
+                                SettingsActionButton(
+                                    label = if (template.builtIn) "复制" else "编辑",
+                                    backdrop = backdrop,
+                                    onClick = { editingTemplate = template },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = true
+                                )
                             }
                             SettingsActionRow(
                                 title = "安排时段",
                                 subtitle = "固定时段、全天或跟随课表",
                                 buttonText = "新建规则",
-                                iconRes = com.xiaomanjun.sleepdownschedule.R.drawable.ic_snow_guard,
+                                iconRes = R.drawable.ic_snow_guard,
                                 backdrop = backdrop
                             ) {
                                 editingRule = GuardRule(UUID.randomUUID().toString(), template.name, template.id, Trigger.WEEKLY)
@@ -293,7 +384,9 @@ fun GuardSettingsScreen(
             document?.let { doc ->
                 GlassPreferenceSection("保护规则") {
                     SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
-                        if (doc.rules.isEmpty()) SettingsValueRow("暂无规则", "跟随课表或固定时段都从这里开始", compact = true)
+                        if (doc.rules.isEmpty()) {
+                            SettingsValueRow("暂无规则", "跟随课表或固定时段都从这里开始", compact = true)
+                        }
                         doc.rules.forEach { rule ->
                             SettingsToggleRow(
                                 title = rule.name,
@@ -305,9 +398,25 @@ fun GuardSettingsScreen(
                                     mutate { it.copy(rules = it.rules.map { r -> if (r.id == rule.id) r.copy(enabled = enabled) else r }) }
                                 }
                             )
-                            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                SettingsActionButton("编辑", backdrop, { newRule = false; editingRule = rule }, Modifier.weight(1f), monochrome = true)
-                                SettingsActionButton("删除", backdrop, { mutate { it.copy(rules = it.rules.filterNot { r -> r.id == rule.id }) } }, Modifier.weight(1f), monochrome = true, destructive = true)
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                SettingsActionButton(
+                                    label = "编辑",
+                                    backdrop = backdrop,
+                                    onClick = { newRule = false; editingRule = rule },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = true
+                                )
+                                SettingsActionButton(
+                                    label = "删除",
+                                    backdrop = backdrop,
+                                    onClick = { mutate { it.copy(rules = it.rules.filterNot { r -> r.id == rule.id }) } },
+                                    modifier = Modifier.weight(1f),
+                                    monochrome = true,
+                                    destructive = true
+                                )
                             }
                         }
                     }
@@ -318,7 +427,9 @@ fun GuardSettingsScreen(
             GlassPreferenceSection("保护时间轴") {
                 SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
                     val upcoming = status.windows.filter { it.end > System.currentTimeMillis() }.take(8)
-                    if (upcoming.isEmpty()) SettingsValueRow("暂无时段", "缺少开学日期或规则未启用时不会生成时段", compact = true)
+                    if (upcoming.isEmpty()) {
+                        SettingsValueRow("暂无时段", "缺少开学日期或规则未启用时不会生成时段", compact = true)
+                    }
                     upcoming.forEach { window ->
                         SettingsValueRow("${clock(window.start)} — ${clock(window.end)}", window.reason, compact = true)
                     }
@@ -327,7 +438,7 @@ fun GuardSettingsScreen(
         }
         item(key = "guard-health") {
             document?.let { doc ->
-                GlassPreferenceSection("权限健康") {
+                GlassPreferenceSection("能力检查") {
                     SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
                         AndroidAudioBackend(context, doc.enhanced, doc.rootMode).capabilities().items.forEach { capability ->
                             SettingsValueRow(
@@ -336,11 +447,11 @@ fun GuardSettingsScreen(
                                 compact = true
                             )
                         }
-                        SettingsNavigationRow("授予勿扰访问权限", onClick = { openSettings(context, Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS) { message = "系统未提供勿扰入口" } })
-                        SettingsNavigationRow("授予媒体暂停所需的通知访问权限", onClick = { openSettings(context, Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS) { message = "系统未提供通知访问入口" } })
-                        if (Build.VERSION.SDK_INT >= 31) {
-                            SettingsNavigationRow("允许精确时段触发", onClick = { openSettings(context, Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, true) { message = "系统未提供精确闹钟入口" } })
-                        }
+                        SettingsNavigationRow(
+                            "查看完整权限管理",
+                            subtitle = "逐项授权，和系统设置一样的列表",
+                            onClick = onOpenPermissions
+                        )
                     }
                 }
             }
@@ -360,18 +471,31 @@ fun GuardSettingsScreen(
                     SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
                         SettingsInfoRow("最近一次操作", message.orEmpty())
                         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
-                            SettingsActionButton("知道了", backdrop, { message = null }, Modifier.weight(1f), monochrome = true)
+                            SettingsActionButton(
+                                label = "知道了",
+                                backdrop = backdrop,
+                                onClick = { message = null },
+                                modifier = Modifier.weight(1f),
+                                monochrome = true
+                            )
                         }
                     }
                 }
             }
         }
         item(key = "guard-events") {
-            GlassPreferenceSection("本地执行记录") {
+            GlassPreferenceSection("执行记录") {
                 SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
-                    if (events.isEmpty()) SettingsValueRow("暂无记录", "保护开始时才会写入", compact = true)
-                    events.take(12).forEach { event ->
-                        SettingsValueRow(formatMoment(event.time), event.message, compact = true)
+                    if (events.isEmpty()) {
+                        SettingsValueRow("暂无记录", "保护开始时才会写入", compact = true)
+                    }
+                    events.take(20).forEach { event ->
+                        val parsed = parseGuardEvent(event.message)
+                        SettingsInfoRow(
+                            title = "${clock(event.time)} · ${parsed.title}",
+                            body = parsed.detail,
+                            badgeText = parsed.badge
+                        )
                     }
                 }
             }
@@ -382,7 +506,9 @@ fun GuardSettingsScreen(
         editingRule?.let { rule ->
             RuleEditor(rule, doc, state.schedules, onDismiss = { editingRule = null }, onSave = { edited ->
                 run {
-                    store.update { it.copy(rules = if (newRule) it.rules + edited else it.rules.map { r -> if (r.id == edited.id) edited else r }) }
+                    withContext(Dispatchers.IO) {
+                        store.update { it.copy(rules = if (newRule) it.rules + edited else it.rules.map { r -> if (r.id == edited.id) edited else r }) }
+                    }
                     GuardEngine.start(context); editingRule = null
                 }
             })
@@ -390,7 +516,9 @@ fun GuardSettingsScreen(
         editingTemplate?.let { template ->
             TemplateEditor(template, onDismiss = { editingTemplate = null }, onSave = { edited ->
                 run {
-                    store.update { it.copy(customTemplates = it.customTemplates.filterNot { t -> t.id == edited.id } + edited) }
+                    withContext(Dispatchers.IO) {
+                        store.update { it.copy(customTemplates = it.customTemplates.filterNot { t -> t.id == edited.id } + edited) }
+                    }
                     GuardEngine.start(context); editingTemplate = null
                 }
             })
@@ -398,7 +526,115 @@ fun GuardSettingsScreen(
     }
 }
 
-private fun openSettings(context: android.content.Context, action: String, packageUri: Boolean = false, onFailure: () -> Unit) {
+internal data class GuardEventView(val title: String, val detail: String, val badge: String?)
+
+/** Turns the stored "标题｜原因｜错误" audit string into readable rows instead of one long line. */
+internal fun parseGuardEvent(raw: String): GuardEventView {
+    val parts = raw.split("｜")
+    val title = parts.getOrNull(0)?.ifBlank { null } ?: "保护状态"
+    val reasons = parts.getOrNull(1).orEmpty().trim()
+    val errors = parts.getOrNull(2).orEmpty().trim()
+    val detail = buildString {
+        if (reasons.isNotBlank()) append(reasons)
+        if (errors.isNotBlank()) {
+            if (isNotEmpty()) append("\n")
+            append("⚠ ").append(errors)
+        }
+        if (isEmpty()) append("无附加信息")
+    }
+    return GuardEventView(title, detail, if (errors.isNotBlank()) "需处理" else null)
+}
+
+@Composable
+internal fun TrustedDevicesSection(
+    document: GuardDocument,
+    backdrop: Backdrop?,
+    visualConfig: com.xiaomanjun.sleepdownschedule.ScheduleConfigEntity,
+    onChange: ((GuardDocument) -> GuardDocument) -> Unit,
+    onError: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var paired by remember { mutableStateOf<List<TrustedDevice>>(emptyList()) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        onError("已返回授权结果，请下拉刷新设备列表")
+    }
+    fun hasBluetoothPermission(): Boolean =
+        Build.VERSION.SDK_INT < 31 ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    fun refresh() {
+        if (!hasBluetoothPermission()) return
+        runCatching {
+            paired = context.getSystemService(BluetoothManager::class.java)?.adapter?.bondedDevices.orEmpty()
+                .map { TrustedDevice(it.address, it.name ?: "未命名设备") }
+                .sortedBy { it.label }
+        }.onFailure { onError(it.message ?: "无法读取已配对设备") }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refresh() }
+
+    GlassPreferenceSection("可信设备") {
+        SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+            SettingsInfoRow(
+                title = "可信输出放行",
+                body = "只有已勾选的具体设备在确认占满全部播放路由时，才会解除媒体音量限制；路由不明时继续保护。"
+            )
+            if (!hasBluetoothPermission() && Build.VERSION.SDK_INT >= 31) {
+                SettingsActionRow(
+                    title = "蓝牙权限",
+                    subtitle = "读取已配对设备需要“附近的设备”权限",
+                    buttonText = "授权",
+                    iconRes = R.drawable.ic_snow_guard,
+                    backdrop = backdrop
+                ) { permissionLauncher.launch(arrayOf(Manifest.permission.BLUETOOTH_CONNECT)) }
+            }
+            SettingsActionRow(
+                title = "已配对设备",
+                subtitle = if (paired.isEmpty()) "暂无可读取设备，先到系统蓝牙里配对" else "共 ${paired.size} 台，点按勾选可信输出",
+                buttonText = "刷新",
+                iconRes = R.drawable.ic_snow_guard,
+                backdrop = backdrop
+            ) { refresh() }
+            (paired + document.trustedDevices).distinctBy { it.address }.forEach { device ->
+                val trusted = document.trustedDevices.any { it.address == device.address }
+                SettingsToggleRow(
+                    title = device.label,
+                    subtitle = device.address.takeLast(11),
+                    checked = trusted,
+                    backdrop = backdrop,
+                    onCheckedChange = { value ->
+                        onChange { current ->
+                            current.copy(
+                                trustedDevices = current.trustedDevices.filterNot { it.address == device.address } +
+                                    if (value) listOf(device) else emptyList()
+                            )
+                        }
+                    }
+                )
+            }
+            SettingsToggleRow(
+                title = "信任有线耳机",
+                subtitle = "3.5mm 耳机/耳麦视为可信输出",
+                checked = document.trustWired,
+                backdrop = backdrop,
+                onCheckedChange = { value -> onChange { it.copy(trustWired = value) } }
+            )
+            SettingsToggleRow(
+                title = "信任 USB 耳机",
+                subtitle = "USB-C 耳机视为可信输出",
+                checked = document.trustUsb,
+                backdrop = backdrop,
+                onCheckedChange = { value -> onChange { it.copy(trustUsb = value) } }
+            )
+        }
+    }
+}
+
+private fun openSettings(
+    context: android.content.Context,
+    action: String,
+    packageUri: Boolean = false,
+    onFailure: () -> Unit
+) {
     runCatching {
         context.startActivity(
             Intent(action).apply {
@@ -412,17 +648,14 @@ private fun openSettings(context: android.content.Context, action: String, packa
 private fun clock(time: Long): String =
     Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
 
-private fun formatMoment(time: Long): String =
-    Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
-
-internal fun policySummary(p: com.xiaomanjun.sleepdownschedule.domain.guard.SoundPolicy): String = listOf(
+internal fun policySummary(p: SoundPolicy): String = listOf(
     "媒体${p.mediaCap?.let { "≤$it%" } ?: "保持"}",
     when (p.ring) {
-        com.xiaomanjun.sleepdownschedule.domain.guard.RingPolicy.KEEP -> "铃声保持"
-        com.xiaomanjun.sleepdownschedule.domain.guard.RingPolicy.VIBRATE -> "震动"
-        com.xiaomanjun.sleepdownschedule.domain.guard.RingPolicy.SILENT -> "静音"
+        RingPolicy.KEEP -> "铃声保持"
+        RingPolicy.VIBRATE -> "震动"
+        RingPolicy.SILENT -> "静音"
     },
-    "闹钟${if (p.alarms == com.xiaomanjun.sleepdownschedule.domain.guard.AlarmPolicy.KEEP) "保持" else "静音"}",
+    "闹钟${if (p.alarms == AlarmPolicy.KEEP) "保持" else "静音"}",
     if (p.pausePlayback) "尝试暂停" else "不暂停播放",
     if (p.lockVolume) "自动纠正音量" else "不锁定音量",
     p.brightnessCap?.let { "亮度≤$it%" } ?: "亮度保持",

@@ -46,4 +46,5 @@
     <string name="widget_preview_laboratory_course">实验课程</string>
     <string name="widget_today_empty">今天没有课</string>
     <string name="widget_tomorrow_empty">明天没有课</string>
-</resources>
+    <string name="guard_lock_accessibility_label">ShutUp 上课锁机</string>
+    <string name="guard_lock_accessibility_desc">锁机期间把页面拉回前台并阻止切换到未授权应用。不读取页面内容。</string></resources>

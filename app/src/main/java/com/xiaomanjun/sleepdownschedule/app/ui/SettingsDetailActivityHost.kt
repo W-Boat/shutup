@@ -250,6 +250,42 @@ open class SettingsDetailActivityHost : ComponentActivity() {
                     when (section) {
                         SettingsPage.Guard -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardSettingsScreen(
                             state = state,
+                            backdrop = backdrop,
+                            onOpenPermissions = {
+                                ActivityTransitionCoordinator.openImmediate(
+                                    this@SettingsDetailActivityHost,
+                                    TransitionRouteId.SettingsToSettingsDetail,
+                                    Intent(this@SettingsDetailActivityHost, SettingsDetailActivity::class.java)
+                                        .putExtra(SettingsDetailPageExtra, SettingsPage.GuardPermissions.name)
+                                )
+                            },
+                            onOpenLock = {
+                                ActivityTransitionCoordinator.openImmediate(
+                                    this@SettingsDetailActivityHost,
+                                    TransitionRouteId.SettingsToSettingsDetail,
+                                    Intent(this@SettingsDetailActivityHost, SettingsDetailActivity::class.java)
+                                        .putExtra(SettingsDetailPageExtra, SettingsPage.GuardLock.name)
+                                )
+                            },
+                            onOpenDevices = {
+                                ActivityTransitionCoordinator.openImmediate(
+                                    this@SettingsDetailActivityHost,
+                                    TransitionRouteId.SettingsToSettingsDetail,
+                                    Intent(this@SettingsDetailActivityHost, SettingsDetailActivity::class.java)
+                                        .putExtra(SettingsDetailPageExtra, SettingsPage.GuardDevices.name)
+                                )
+                            }
+                        )
+                        SettingsPage.GuardPermissions -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardPermissionsScreen(
+                            state = state,
+                            backdrop = backdrop
+                        )
+                        SettingsPage.GuardLock -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardLockScreen(
+                            state = state,
+                            backdrop = backdrop
+                        )
+                        SettingsPage.GuardDevices -> com.xiaomanjun.sleepdownschedule.feature.guard.GuardDevicesScreen(
+                            state = state,
                             backdrop = backdrop
                         )
                         SettingsPage.General -> GeneralSettingsScreen(
