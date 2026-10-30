@@ -96,6 +96,7 @@ class CourseScheduleApp : Application() {
         }
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
+                com.xiaomanjun.sleepdownschedule.feature.guard.GuardRecovery.onForeground(this@CourseScheduleApp)
                 com.xiaomanjun.sleepdownschedule.feature.backup.webdav.WebDavAutomation.checkOnForeground(this@CourseScheduleApp)
                 setTaskExcludedFromRecents(false)
                 NotificationScheduler.requestRefresh(this@CourseScheduleApp)

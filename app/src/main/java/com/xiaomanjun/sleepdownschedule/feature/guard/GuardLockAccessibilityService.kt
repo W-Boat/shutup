@@ -14,14 +14,17 @@ import kotlinx.coroutines.*
  * 只订阅窗口切换事件，不读取页面内容（canRetrieveWindowContent=false），隐私面最小化。
  */
 class GuardLockAccessibilityService : AccessibilityService() {
+    companion object { @Volatile var connected = false; private set }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var settings: LockSettings? = null
     override fun onServiceConnected() {
         super.onServiceConnected()
+        connected = true
         scope.launch { GuardStore(this@GuardLockAccessibilityService).document.collect { settings = it.lock } }
     }
 
-    override fun onDestroy() { scope.cancel(); super.onDestroy() }
+    override fun onDestroy() { connected = false; scope.cancel(); super.onDestroy() }
+    override fun onUnbind(intent: Intent?): Boolean { connected = false; return super.onUnbind(intent) }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString().orEmpty()
@@ -31,7 +34,7 @@ class GuardLockAccessibilityService : AccessibilityService() {
         if (!session.active || !session.decided || session.skipped) return
         if (session.endsAt in 1 until System.currentTimeMillis()) return
         val lock = settings ?: return
-        if (!lock.enabled) return
+        if (!lock.enabled && !session.isTest) return
         if (pkg in lock.allowedPackages) return
         runCatching {
             startActivity(

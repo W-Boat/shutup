@@ -33,6 +33,7 @@ internal object GuardRootBridge {
     fun requestAuthorization(context: Context): Boolean {
         val result = exec("id -u", 20_000L)
         val granted = result?.trim() == "0"
+        if (!granted) GuardRootKeeper.stopLocal(context)
         cached = granted
         context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).edit()
             .putBoolean(Authorized, granted)
@@ -42,6 +43,7 @@ internal object GuardRootBridge {
     }
 
     fun forget(context: Context) {
+        GuardRootKeeper.stopLocal(context)
         cached = false
         context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).edit()
             .putBoolean(Authorized, false)
@@ -85,6 +87,7 @@ internal object GuardRootBridge {
         // A stored grant cannot prove su is still available. Stop using the failing bridge until
         // the user explicitly authorizes it again; the audio backend falls back to public APIs.
         cached = false
+        GuardRootKeeper.stopLocal(context)
         context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).edit()
             .putBoolean(Authorized, false).putLong(CheckedAt, System.currentTimeMillis()).apply()
         return false
@@ -99,5 +102,19 @@ internal object GuardRootBridge {
     fun grantWriteSettings(context: Context): Boolean {
         if (!isAuthorized(context)) return false
         return run("appops set ${context.packageName} WRITE_SETTINGS allow")?.exitCode == 0
+    }
+
+    /** Append our exact component; never replace another app's accessibility grants. */
+    fun enableLockAccessibility(context: Context): Boolean {
+        if (!isAuthorized(context)) return false
+        val user = android.os.Process.myUid() / 100_000
+        val component = android.content.ComponentName(context, GuardLockAccessibilityService::class.java).flattenToString()
+        require(component.matches(Regex("[A-Za-z0-9_./]+")))
+        val command = context.assets.open("guard/enable-accessibility.sh").bufferedReader().use { it.readText() }
+            .replace("__USER__", user.toString()).replace("__COMPONENT__", "'$component'")
+        if (!controlResult(context, run(command))) return false
+        val enabled = android.provider.Settings.Secure.getString(context.contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        return enabled.split(':').any { android.content.ComponentName.unflattenFromString(it)?.flattenToString() == component }
     }
 }

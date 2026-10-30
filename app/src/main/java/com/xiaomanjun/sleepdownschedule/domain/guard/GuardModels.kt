@@ -92,6 +92,9 @@ data class GuardDocument(
     val skipUntil: Long = 0,
     /** Optional su activation: hard volume/brightness writes and battery whitelist. */
     val rootMode: Boolean = false,
+    /** Explicit opt-in to a separate root watchdog; never inferred from root audio mode. */
+    val rootKeepAlive: Boolean = false,
+    val rootAccessibility: Boolean = false,
     /** 1px transparent overlay window that keeps the protection process out of the freezer. */
     val keepAliveOverlay: Boolean = false,
     /** Publish guard state to Live Updates / Xiaomi focus island. */

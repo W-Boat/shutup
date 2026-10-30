@@ -42,6 +42,12 @@ internal object GuardLockController {
 
     fun tick(context: Context, document: GuardDocument, windows: List<ProtectionWindow>, now: Long) {
         val store = LockStore(context)
+        val test = store.session()
+        if (test.isTest && test.active && test.endsAt > now && !test.skipped) {
+            if (!test.decided) notifyDecision(context,
+                ProtectionWindow("lock-test", test.courseName, "", test.startedAt, test.endsAt), 0, true)
+            return
+        }
         if (!document.lock.enabled || document.bypassUntil > now || document.skipUntil > now) {
             finishSession(context)
             return
@@ -120,6 +126,12 @@ internal object GuardLockController {
         val session = LockStore(context).session()
         if (session.active && !session.skipped && session.endsAt > System.currentTimeMillis())
             runCatching { context.startActivity(GuardLockActivity.intent(context, session.windowKey)) }
+    }
+
+    fun startTest(context: Context) {
+        LockStore(context).startTest(System.currentTimeMillis())
+        GuardEngine.start(context)
+        launch(context)
     }
 
     fun finishSession(context: Context) {

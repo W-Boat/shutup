@@ -157,7 +157,7 @@ class GuardLockActivity : ComponentActivity() {
         if (withContext(Dispatchers.IO) { lockStore.exit(session.windowKey, System.currentTimeMillis(), quota) }) {
             exiting = true
             runCatching { stopLockTask() }
-            Toast.makeText(this@GuardLockActivity, "已使用一次退出机会，本月剩余 ${lockStore.exitsLeft(quota)} 次", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@GuardLockActivity, if (session.isTest) "测试已结束，未消耗退出机会" else "已使用一次退出机会，本月剩余 ${lockStore.exitsLeft(quota)} 次", Toast.LENGTH_LONG).show()
             finishAndRemoveTask()
             startActivity(Intent(this@GuardLockActivity, SnowLeopardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } else {
@@ -273,12 +273,12 @@ private fun GuardLockContent(sessionKey: () -> String, onFinished: () -> Unit,
         val left = lockStore.exitsLeft(quota)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
             MiuixText(
-                text = "本月直接退出机会：$left / $quota",
+                text = if (session.isTest) "测试模式：可随时结束，不消耗退出额度" else "本月直接退出机会：$left / $quota",
                 fontSize = 14.sp,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
             )
             Button(onClick = onExit, modifier = Modifier.fillMaxWidth(), minHeight = 46.dp) {
-                MiuixText(if (left > 0) "使用一次退出机会" else "本月机会已用完", fontSize = 16.sp)
+                MiuixText(if (session.isTest) "结束测试" else if (left > 0) "使用一次退出机会" else "本月机会已用完", fontSize = 16.sp)
             }
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.Center) {
                 TextButton(text = "继续学习", onClick = onStay)

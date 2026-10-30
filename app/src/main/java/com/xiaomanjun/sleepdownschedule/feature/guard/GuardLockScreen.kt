@@ -68,6 +68,11 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
     var message by remember { mutableStateOf<String?>(null) }
     var showAllApps by remember { mutableStateOf(false) }
     var noteCourse by remember { mutableStateOf("") }
+    var rootBusy by remember { mutableStateOf(false) }
+    var rootStatus by remember { mutableStateOf("尚未检查") }
+    val lastExit by androidx.compose.runtime.produceState("正在读取进程退出记录") {
+        value = withContext(Dispatchers.IO) { GuardRecovery.lastExit(context) }
+    }
 
     fun run(action: suspend () -> Unit) = scope.launch {
         try { action() } catch (e: Exception) {
@@ -88,7 +93,13 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
             val doc = document
             GlassPreferenceSection("上课锁机") {
                 SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                    SettingsActionRow("测试锁机 · 60 秒", "无需课表或开启锁机；可提前结束，不消耗退出额度。正式锁机进行中不能测试。",
+                        "测试", backdrop = backdrop) { run { GuardLockController.startTest(context) } }
+                    if (session.active && session.isTest) SettingsActionRow("结束本次测试", "立即结束体验，不更改课表规则", "结束", backdrop = backdrop) {
+                        run { withContext(Dispatchers.IO) { lockStore.endTest(session.windowKey, System.currentTimeMillis()) }; GuardEngine.start(context) }
+                    }
                     SettingsInfoRow("当前锁机状态", when {
+                        session.active && session.isTest -> "锁机测试中 · 60 秒后自动结束，不消耗退出额度"
                         doc?.lock?.enabled != true -> "未启用"
                         status.errors.isNotEmpty() && !session.active -> status.errors.joinToString("\n")
                         !session.active && status.lockWindows.any { it.classStart > System.currentTimeMillis() } -> {
@@ -195,6 +206,62 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
         }
         lockCourseScopeItems(document, courseSchedules, showCourseScope, { showCourseScope = !showCourseScope },
             backdrop, visualConfig) { change -> mutate(change) }
+        item(key = "lock-root-recovery") {
+            document?.let { doc ->
+                GlassPreferenceSection("Root 保活与诊断") {
+                    SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                        SettingsToggleRow("独立 Root 守护", "默认关闭。启用后尝试恢复被杀或强停的服务；心跳超时后最多连续尝试 3 次。不是开机模块，不保证所有系统生效。",
+                            checked = doc.rootKeepAlive, backdrop = backdrop, onCheckedChange = { enabled ->
+                                if (!rootBusy) run {
+                                    rootBusy = true
+                                    try {
+                                        rootStatus = withContext(Dispatchers.IO) {
+                                            if (enabled) {
+                                                check(GuardRootBridge.requestAuthorization(context)) { "su 未授权，未开启守护" }
+                                                store.update { it.copy(rootKeepAlive = true) }
+                                                try { GuardRootKeeper.start(context) } catch (e: Exception) {
+                                                    store.update { it.copy(rootKeepAlive = false) }; throw e
+                                                }
+                                            } else {
+                                                store.update { it.copy(rootKeepAlive = false) }
+                                                GuardRootKeeper.stop(context)
+                                                "已撤销守护标记并请求停止独立进程"
+                                            }
+                                        }
+                                        GuardEngine.start(context)
+                                    } finally { rootBusy = false }
+                                }
+                            })
+                        SettingsActionRow("Root 守护状态", if (rootBusy) "处理中…" else rootStatus, "检查", backdrop = backdrop) {
+                            run { rootStatus = withContext(Dispatchers.IO) { GuardRootKeeper.status(context) } }
+                        }
+                        SettingsToggleRow("Root 启用并恢复无障碍", "仅追加本应用；保护服务重新启动时尝试恢复。关闭此项只停止自动恢复，不关闭系统中已授权的服务。",
+                            checked = doc.rootAccessibility, backdrop = backdrop, onCheckedChange = { enabled ->
+                            if (!enabled) mutate { it.copy(rootAccessibility = false) }
+                            else if (!rootBusy) run {
+                                rootBusy = true
+                                try {
+                                    val written = withContext(Dispatchers.IO) {
+                                        GuardRootBridge.requestAuthorization(context) && GuardRootBridge.enableLockAccessibility(context)
+                                    }
+                                    if (written) withContext(Dispatchers.IO) { store.update { it.copy(rootAccessibility = true) } }
+                                    val until = android.os.SystemClock.elapsedRealtime() + 5_000
+                                    while (written && !GuardLockAccessibilityService.connected && android.os.SystemClock.elapsedRealtime() < until)
+                                        kotlinx.coroutines.delay(250)
+                                    message = when {
+                                        !written -> "Root 写入或回读失败，请在权限管理中手动授权"
+                                        GuardLockAccessibilityService.connected -> "锁机无障碍已连接"
+                                        else -> "系统设置已写入，但无障碍尚未连接；请在权限管理中检查系统限制"
+                                    }
+                                } finally { rootBusy = false }
+                            }
+                        })
+                        SettingsInfoRow("最近进程退出", lastExit)
+                        SettingsInfoRow("普通恢复的边界", "划掉任务和进程回收会尝试恢复；真正强行停止后，普通模式需重新打开应用。重新打开时会自动恢复已启用的保护。Root 守护另行主动开启。")
+                    }
+                }
+            }
+        }
         item(key = "lock-quotes") {
             document?.let { doc ->
                 GlassPreferenceSection("静心句子") {

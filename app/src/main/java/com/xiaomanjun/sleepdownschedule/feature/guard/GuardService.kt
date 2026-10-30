@@ -88,6 +88,7 @@ internal object GuardEngine {
             if (resolved.policy != null && route.identity == "unknown") errors += "无法确认音频路由：保持媒体限制，无法安全自动恢复此输出的旧音量"
             if (document.enhanced && !EnhancedAudioBridge.authorized()) errors += "Shizuku 不可用，已降级普通控制"
             if (document.rootMode && !GuardRootBridge.isAuthorized(context)) errors += "Root 模式已开启但 su 未授权，已降级为普通控制"
+            if (document.rootKeepAlive && !GuardRootBridge.isAuthorized(context)) errors += "Root 守护未获授权，当前仅使用普通恢复"
             val backend = AndroidAudioBackend(context, document.enhanced, document.rootMode)
             val runtimeBefore = store.runtime()
             AudioController(backend).reconcile(runtimeBefore, resolved, route, store::saveRuntime) { errors += it }
@@ -151,6 +152,7 @@ internal object GuardEngine {
 
     private fun reminderTarget(context: Context, document: GuardDocument, now: Long): Long {
         val candidates = mutableListOf<Long>()
+        LockStore(context).session().takeIf { it.active && it.isTest && it.endsAt > now }?.let { candidates += it.endsAt }
         val lead = document.preReminderSeconds * 1000L
         if (lead > 0) windows.asSequence().map { it.start - lead }.filter { it > now }.minOrNull()?.let { candidates += it }
         val careLead = document.care.safeLeadMinutes * 60_000L
@@ -294,6 +296,7 @@ internal object GuardEngine {
 class GuardService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val signal = Channel<Boolean>(Channel.CONFLATED)
+    private val heartbeatWake = Channel<Unit>(Channel.CONFLATED)
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var audio: AudioManager
     private val refreshNeeded = AtomicBoolean(true)
@@ -327,6 +330,13 @@ class GuardService : Service() {
                 .catch { e -> GuardEngine.status.value = GuardEngine.status.value.copy(title = "能力受限", errors = listOf(e.message ?: "规则读取失败")) }
                 .collect { doc ->
                     document = doc
+                    heartbeatWake.trySend(Unit)
+                    if (doc.rootAccessibility && GuardRootBridge.isAuthorized(this@GuardService) && !GuardLockAccessibilityService.connected)
+                        runCatching { GuardRootBridge.enableLockAccessibility(this@GuardService) }
+                    if (doc.rootKeepAlive && GuardRootBridge.isAuthorized(this@GuardService)) {
+                        runCatching { GuardRootKeeper.start(this@GuardService) }
+                            .onFailure { GuardEngine.status.value = GuardEngine.status.value.copy(errors = listOf(it.message ?: "Root 守护启动失败")) }
+                    } else GuardRootKeeper.stopLocal(this@GuardService)
                     syncOverlay(doc)
                     refreshNeeded.set(true); signal.send(true)
                 }
@@ -342,7 +352,7 @@ class GuardService : Service() {
                     getSystemService(NotificationManager::class.java)?.notify(FOREGROUND_ID, notification)
                 }
                 // Idle means: no enabled rules, no manual session, no active window.
-                if (doc != null && !doc.lock.enabled && doc.rules.none { it.enabled } && doc.manualUntil <= System.currentTimeMillis() &&
+                if (doc != null && !GuardLifecycle.needsService(doc, LockStore(this@GuardService).session(), System.currentTimeMillis()) &&
                     result.endAt == null && result.title == "未生效") {
                     stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
                 }
@@ -352,8 +362,13 @@ class GuardService : Service() {
             // Event-driven reconcile plus a cheap heartbeat; the heartbeat only shortens while a
             // protection window is open, so idle cost stays near zero.
             while (isActive) {
+                if (document?.rootKeepAlive == true && GuardRootBridge.isAuthorized(this@GuardService)) {
+                    runCatching { GuardRootKeeper.heartbeat(this@GuardService) }
+                }
                 val active = GuardEngine.status.value.title == "正在保护"
-                delay(if (active) 5_000 else 120_000)
+                withTimeoutOrNull(if (active) 5_000L else if (document?.rootKeepAlive == true) 15_000L else 120_000L) {
+                    heartbeatWake.receive()
+                }
                 signal.send(false)
             }
         }
@@ -382,7 +397,7 @@ class GuardService : Service() {
         super.onTaskRemoved(rootIntent)
         // Swiping the task away must not end the protection: wake ourselves again in 2s.
         val doc = document
-        val busy = doc != null && (doc.lock.enabled || doc.rules.any { it.enabled } || doc.manualUntil > System.currentTimeMillis())
+        val busy = doc != null && GuardLifecycle.needsService(doc, LockStore(this).session(), System.currentTimeMillis())
         if (busy) GuardEngine.scheduleRestart(this)
         GuardEngine.refreshTiles(this)
     }
@@ -512,7 +527,7 @@ class GuardReceiver : BroadcastReceiver() {
                 withTimeout(8_000) {
                     GuardEngine.reconcile(context, true)
                     val doc = GuardStore(context).document.first()
-                    if (doc.lock.enabled || doc.rules.any { it.enabled } || doc.manualUntil > System.currentTimeMillis() ||
+                    if (GuardLifecycle.needsService(doc, LockStore(context).session(), System.currentTimeMillis()) ||
                         GuardEngine.status.value.endAt != null) GuardEngine.start(context)
                 }
             } finally { pending.finish() }

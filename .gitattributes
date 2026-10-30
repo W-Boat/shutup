@@ -3,3 +3,4 @@ app/src/main/assets/shiguang_warehouse-main/** linguist-vendored=true
 third-party/** linguist-vendored=true
 # Keep exported dependency patches applicable to upstream LF sources on every host.
 patches/*.patch text eol=lf
+app/src/main/assets/guard/*.sh text eol=lf

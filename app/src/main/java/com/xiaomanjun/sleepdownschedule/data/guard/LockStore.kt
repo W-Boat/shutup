@@ -22,7 +22,8 @@ class LockStore(context: Context) {
         graceEndsAt = prefs.getLong("grace_ends_at", 0),
         decided = prefs.getBoolean("decided", false),
         skipped = prefs.getBoolean("skipped", false),
-        pendingEntry = prefs.getBoolean("pending_entry", false)
+        pendingEntry = prefs.getBoolean("pending_entry", false),
+        isTest = prefs.getBoolean("is_test", false)
     )
 
     private fun write(session: LockSession, edit: android.content.SharedPreferences.Editor = prefs.edit()) {
@@ -31,7 +32,7 @@ class LockStore(context: Context) {
             .putString("reason", session.reason).putLong("ends_at", session.endsAt)
             .putLong("started_at", session.startedAt).putLong("grace_ends_at", session.graceEndsAt)
             .putBoolean("decided", session.decided).putBoolean("skipped", session.skipped)
-            .putBoolean("pending_entry", session.pendingEntry).commit()) { "锁机会话保存失败" }
+            .putBoolean("pending_entry", session.pendingEntry).putBoolean("is_test", session.isTest).commit()) { "锁机会话保存失败" }
     }
 
     fun transition(change: (LockSession) -> LockSession): LockSession = synchronized(monitor) {
@@ -39,7 +40,16 @@ class LockStore(context: Context) {
         change(old).also { if (it != old) write(it) }
     }
 
-    fun clear() { transition { it.copy(active = false, pendingEntry = false, decided = false, skipped = false) } }
+    fun clear() { transition { it.copy(active = false, pendingEntry = false, decided = false, skipped = false, isTest = false) } }
+
+    fun startTest(now: Long): LockSession = transition { LockStateMachine.testSession(it, now) }
+
+    fun endTest(key: String, now: Long): Boolean = synchronized(monitor) {
+        val old = read()
+        if (!old.isTest || !LockStateMachine.valid(old, key, now)) return@synchronized false
+        write(old.copy(active = false, pendingEntry = false, decided = false, skipped = true))
+        true
+    }
 
     private fun rollover() {
         val month = YearMonth.now().toString()
@@ -54,6 +64,7 @@ class LockStore(context: Context) {
     fun exit(key: String, now: Long, quota: Int): Boolean = synchronized(monitor) {
         rollover()
         val old = read()
+        if (old.isTest) return@synchronized endTest(key, now)
         val used = prefs.getInt("exits_used", 0)
         val next = LockStateMachine.exit(old, key, now, used, quota)
         if (next == old) return@synchronized false
