@@ -127,7 +127,8 @@ internal object GuardEngine {
             val summary = "$title｜${resolved.reasons.joinToString()}｜${errors.distinct().joinToString()}"
             if (summary != lastAudit) {
                 val dao = GuardDatabase.get(context).dao()
-                dao.insert(GuardEvent(time = now, message = summary)); dao.trimEvents()
+                dao.insert(GuardEvent(time = now, message = summary, title = title,
+                    reason = resolved.reasons.joinToString("、"), error = errors.distinct().joinToString("\n"))); dao.trimEvents()
                 lastAudit = summary
             }
             if (document.rootMode && GuardRootBridge.isAuthorized(context) && now - lastWhitelist > 3_600_000L) {

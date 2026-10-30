@@ -39,7 +39,10 @@ class GuardStore(context: Context) {
 }
 
 @Entity(tableName = "guard_events")
-data class GuardEvent(@PrimaryKey(autoGenerate = true) val id: Long = 0, val time: Long, val message: String)
+data class GuardEvent(@PrimaryKey(autoGenerate = true) val id: Long = 0, val time: Long, val message: String,
+    @ColumnInfo(defaultValue = "''") val title: String = "",
+    @ColumnInfo(defaultValue = "''") val reason: String = "",
+    @ColumnInfo(defaultValue = "''") val error: String = "")
 @Entity(tableName = "guard_drafts")
 data class GuardDraft(@PrimaryKey val id: String, val time: Long, val payload: String)
 
@@ -54,14 +57,21 @@ data class GuardDraft(@PrimaryKey val id: String, val time: Long, val payload: S
     @Query("DELETE FROM guard_drafts WHERE id = :id") suspend fun deleteDraft(id: String)
 }
 
-@Database(entities = [GuardEvent::class, GuardDraft::class], version = 1, exportSchema = false)
+@Database(entities = [GuardEvent::class, GuardDraft::class], version = 2, exportSchema = false)
 abstract class GuardDatabase : RoomDatabase() {
     abstract fun dao(): GuardDao
     companion object {
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE guard_events ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE guard_events ADD COLUMN reason TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE guard_events ADD COLUMN error TEXT NOT NULL DEFAULT ''")
+            }
+        }
         @Volatile private var instance: GuardDatabase? = null
         fun get(context: Context): GuardDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, GuardDatabase::class.java, "snow-guard.db")
-                .build().also { instance = it }
+                .addMigrations(MIGRATION_1_2).build().also { instance = it }
         }
     }
 }

@@ -520,7 +520,7 @@ fun GuardSettingsScreen(
                     events.take(20).forEach { event ->
                         val parsed = parseGuardEvent(event.message)
                         SettingsInfoRow(
-                            title = "${clock(event.time)} · ${parsed.title}",
+                            title = "${clock(event.time)} · ${event.title.ifBlank { parsed.title }}",
                             body = parsed.detail,
                             badgeText = parsed.badge
                         )
