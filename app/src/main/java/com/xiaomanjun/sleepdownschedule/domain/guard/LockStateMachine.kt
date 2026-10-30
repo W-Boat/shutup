@@ -18,6 +18,9 @@ object LockStateMachine {
     fun valid(session: LockSession, key: String, now: Long): Boolean =
         session.active && key.isNotBlank() && session.windowKey == key && now < session.endsAt
 
+    fun shouldCloseScreen(session: LockSession, screenKey: String, now: Long): Boolean =
+        !valid(session, screenKey, now) || session.skipped
+
     fun choose(session: LockSession, key: String, now: Long, lock: Boolean): LockSession =
         if (!valid(session, key, now) || session.decided || session.skipped) session
         else session.copy(pendingEntry = lock, skipped = !lock)

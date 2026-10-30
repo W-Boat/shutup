@@ -48,4 +48,13 @@ class LockStateMachineTest {
         assertFalse(LockStateMachine.begin(LockSession(), candidate, setOf("math|1000"), setOf("math|1000")).active)
         assertTrue(LockStateMachine.begin(LockSession(), candidate, setOf("math|999"), setOf("math|1000")).active)
     }
+    @Test fun oldScreenCannotInheritAnAdjacentClassSession() {
+        val nextClass = course.copy(windowKey = "next", endsAt = 9000)
+        assertTrue(LockStateMachine.shouldCloseScreen(nextClass, course.windowKey, 5000))
+        assertFalse(LockStateMachine.shouldCloseScreen(nextClass, "next", 5000))
+    }
+    @Test fun screenClosesAtExactEndAndAfterSkipping() {
+        assertTrue(LockStateMachine.shouldCloseScreen(course, course.windowKey, 5000))
+        assertTrue(LockStateMachine.shouldCloseScreen(course.copy(skipped = true), course.windowKey, 2000))
+    }
 }

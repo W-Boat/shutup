@@ -79,6 +79,8 @@ class GuardLockActivity : ComponentActivity() {
             CourseScheduleTheme {
                 MiuixTheme {
                     GuardLockContent(
+                        sessionKey = { intent.getStringExtra(GuardLockController.WindowKey).orEmpty() },
+                        onFinished = ::finishLock,
                         onOpenAllowed = { packageName -> openAllowedApp(packageName) },
                         onExit = { requestExit() },
                         onStay = { Toast.makeText(this, "很好，继续。", Toast.LENGTH_SHORT).show() }
@@ -196,7 +198,8 @@ class GuardLockActivity : ComponentActivity() {
 }
 
 @Composable
-private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit, onStay: () -> Unit) {
+private fun GuardLockContent(sessionKey: () -> String, onFinished: () -> Unit,
+    onOpenAllowed: (String) -> Unit, onExit: () -> Unit, onStay: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val lockStore = remember { LockStore(context) }
     val settings by produceState(LockSettings()) {
@@ -211,11 +214,10 @@ private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit
         while (true) {
             now = System.currentTimeMillis()
             val session = lockStore.session()
-            val ended = session.endsAt in 1 until now
             // 结束保护、关闭锁机开关、到期或用掉退出机会后，页面必须自己收起来，
             // 否则用户会被一个不再属于任何会话的全屏页困住。
-            if (!session.active || ended) {
-                (context as? GuardLockActivity)?.finishLock()
+            if (com.xiaomanjun.sleepdownschedule.domain.guard.LockStateMachine.shouldCloseScreen(session, sessionKey(), now)) {
+                onFinished()
                 break
             }
             delay(1_000)
