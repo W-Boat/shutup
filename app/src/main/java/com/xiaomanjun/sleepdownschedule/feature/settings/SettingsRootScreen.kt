@@ -23,6 +23,9 @@ import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Widgets
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -230,21 +233,22 @@ fun SettingsRootScreen(
                 SettingsGroup(backdrop = backdrop, config = state.config, modifier = Modifier.fillMaxWidth()) {
                     SettingsNavigationRow(
                         "声音保护",
-                        subtitle = "课表联动静音／亮度、实况窗、快捷磁贴",
-                        leadingIcon = Icons.Rounded.Notifications,
+                        leadingIcon = Icons.Rounded.VolumeOff,
                         leadingIconTint = ComposeColor(0xFF126B5B),
                         selected = selectedPage == SettingsPage.Guard,
                         onClick = { onPageChange(SettingsPage.Guard) }
                     )
                     SettingsNavigationRow(
                         "上课锁机",
-                        subtitle = "决定时间、白名单与每月退出额度",
+                        leadingIcon = Icons.Rounded.Lock,
+                        leadingIconTint = ComposeColor(0xFF5856D6),
                         selected = selectedPage == SettingsPage.GuardLock,
                         onClick = { onPageChange(SettingsPage.GuardLock) }
                     )
                     SettingsNavigationRow(
                         "权限管理",
-                        subtitle = "通知、声音保护与锁机所需权限",
+                        leadingIcon = Icons.Rounded.Security,
+                        leadingIconTint = ComposeColor(0xFFFF9500),
                         selected = selectedPage == SettingsPage.GuardPermissions,
                         onClick = { onPageChange(SettingsPage.GuardPermissions) }
                     )
