@@ -60,6 +60,7 @@ internal object GuardRootKeeper {
             return "Root 守护进程已运行；心跳中断后尝试恢复，仍需真机验证"
         } catch (e: Exception) {
             stopLocal(context)
+            if (GuardRootBridge.exec("id -u")?.trim() != "0") GuardRootBridge.forget(context)
             throw e
         }
     }
@@ -73,7 +74,13 @@ internal object GuardRootKeeper {
     fun status(context: Context): String {
         if (!flag(context).exists()) return "未运行"
         if (!GuardRootBridge.isAuthorized(context)) return "Root 未授权，守护状态无法确认"
-        if (GuardRootBridge.run(ownProcessCheck())?.exitCode != 0) return "守护未存活，请关闭后重新启用"
+        if (GuardRootBridge.run(ownProcessCheck())?.exitCode != 0) {
+            if (GuardRootBridge.exec("id -u")?.trim() != "0") {
+                GuardRootBridge.forget(context)
+                return "su 检查失败，已撤销守护标记；请重新授权 Root"
+            }
+            return "守护未存活，请关闭后重新启用"
+        }
         val state = GuardRootBridge.exec("cat ${quote(runtime() + "/status")}").orEmpty()
         return if (state.startsWith("restart:")) "守护存活，最近尝试恢复服务（$state）；不代表恢复成功" else "守护存活，正在检查服务心跳"
     }
