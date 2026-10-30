@@ -7,6 +7,7 @@ import com.xiaomanjun.sleepdownschedule.domain.schedule.courseTimeSegments
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.flow.first
 
 /** Same resolved occurrences as upstream day/week views, including holiday adjustments. */
 internal data class GuardCourseInputs(val lessons: List<LessonOccurrence>, val warnings: List<String>)
@@ -14,7 +15,9 @@ internal data class GuardCourseInputs(val lessons: List<LessonOccurrence>, val w
 internal suspend fun ScheduleRepository.guardLessons(document: GuardDocument, now: Long, zone: ZoneId): GuardCourseInputs {
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
     val warnings = mutableListOf<String>()
-    val lessons = document.rules.filter { it.enabled && it.trigger == Trigger.COURSES }.mapNotNull { it.scheduleId }.distinct().flatMap { id ->
+    val soundScheduleIds = document.rules.filter { it.enabled && it.trigger == Trigger.COURSES }.mapNotNull { it.scheduleId }
+    val lockScheduleIds = if (document.lock.enabled) allSchedulesState.first().schedules.map { it.id } else emptyList()
+    val lessons = (soundScheduleIds + lockScheduleIds).distinct().flatMap { id ->
         val state = runCatching { scheduleSnapshot(id) }.getOrElse {
             warnings += "课表 $id 无法读取，请重新选择课表"; return@flatMap emptyList()
         }

@@ -97,7 +97,8 @@ class GuardLockActivity : ComponentActivity() {
         lifecycleScope.launch {
             val key = intent.getStringExtra(GuardLockController.WindowKey).orEmpty()
             val session = lockStore.session()
-            if (!com.xiaomanjun.sleepdownschedule.domain.guard.LockStateMachine.valid(session, key, System.currentTimeMillis()) || session.skipped) {
+            if (!com.xiaomanjun.sleepdownschedule.domain.guard.LockStateMachine.valid(session, key, System.currentTimeMillis()) || session.skipped ||
+                (intent.hasExtra(GuardLockController.ExpiresAt) && intent.getLongExtra(GuardLockController.ExpiresAt, 0) != session.endsAt)) {
                 finishLock(); return@launch
             }
             val manager = getSystemService(ActivityManager::class.java)

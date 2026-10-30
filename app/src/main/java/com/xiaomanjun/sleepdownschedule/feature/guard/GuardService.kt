@@ -46,6 +46,7 @@ internal data class GuardStatus(
     val updated: Long = 0,
     val serviceRunning: Boolean = false,
     val windows: List<ProtectionWindow> = emptyList(),
+    val lockWindows: List<ProtectionWindow> = emptyList(),
     /** Latest end of the currently active protection; drives the Live Activity timer. */
     val endAt: Long? = null,
     /** What this reconcile actually changed, used as the Live Activity / island text. */
@@ -58,6 +59,7 @@ internal object GuardEngine {
     val status = MutableStateFlow(GuardStatus())
     private val mutex = Mutex()
     private var windows: List<ProtectionWindow> = emptyList()
+    private var lockWindows: List<ProtectionWindow> = emptyList()
     private var lastAudit = ""
     @Volatile var running = false
     private var lastRefresh = 0L
@@ -76,11 +78,13 @@ internal object GuardEngine {
                 val inputs = (context.applicationContext as CourseScheduleApp).repository.guardLessons(document, now, zone)
                 scheduleWarnings = inputs.warnings
                 windows = RuleCompiler.compile(document, now, zone, inputs.lessons)
+                lockWindows = LockWindowCompiler.compile(document.lock, windows, inputs.lessons)
                 lastRefresh = now
             }
             val route = currentOutput(context, document)
             val resolved = PolicyResolver.resolve(document, windows, now, route)
             val errors = scheduleWarnings.toMutableList()
+            if (document.lock.enabled) GuardLockController.notificationProblem(context)?.let { errors += it }
             if (resolved.policy != null && route.identity == "unknown") errors += "无法确认音频路由：保持媒体限制，无法安全自动恢复此输出的旧音量"
             if (document.enhanced && !EnhancedAudioBridge.authorized()) errors += "Shizuku 不可用，已降级普通控制"
             if (document.rootMode && !GuardRootBridge.isAuthorized(context)) errors += "Root 模式已开启但 su 未授权，已降级为普通控制"
@@ -89,14 +93,14 @@ internal object GuardEngine {
             AudioController(backend).reconcile(runtimeBefore, resolved, route, store::saveRuntime) { errors += it }
             val runtimeAfter = store.runtime()
             val exact = Build.VERSION.SDK_INT < 31 || requireNotNull(context.getSystemService(AlarmManager::class.java)).canScheduleExactAlarms()
-            if (!exact && document.rules.any { it.enabled }) errors += "未授予精确闹钟权限，时段切换可能延迟"
+            if (!exact && (document.lock.enabled || document.rules.any { it.enabled })) errors += "未授予精确闹钟权限，时段切换可能延迟"
             val activeWindows = windows.filter { it.contains(now) }
             val templateName = document.templates.firstOrNull { it.id == document.selectedTemplateId }?.name
                 ?: activeWindows.firstNotNullOfOrNull { w -> document.templates.firstOrNull { it.id == w.templateId }?.name }
                 ?: "未选择模板"
             val title = when {
                 errors.isNotEmpty() -> "能力受限"
-                resolved.policy == null -> "未生效"
+                resolved.policy == null -> if (document.lock.enabled) "锁机待命" else "未生效"
                 resolved.trustedRelease -> "可信耳机放行"
                 else -> "正在保护"
             }
@@ -107,7 +111,7 @@ internal object GuardEngine {
             val reminderAt = reminderTarget(context, document, now)
             schedule(context, minOf(boundary, reminderAt))
             maybeRemind(context, document, now)
-            GuardLockController.tick(context, document, windows, now)
+            GuardLockController.tick(context, document, lockWindows, now)
             GuardCare.tick(context, document, windows, now)
             val endAt = maxOf(document.manualUntil, activeWindows.maxOfOrNull { it.end } ?: 0L).takeIf { it > now }
             val result = GuardStatus(
@@ -119,6 +123,7 @@ internal object GuardEngine {
                 updated = now,
                 serviceRunning = running,
                 windows = windows,
+                lockWindows = lockWindows,
                 endAt = endAt,
                 applied = describeApplied(resolved, runtimeBefore, runtimeAfter, backend),
                 templateName = templateName
@@ -150,7 +155,7 @@ internal object GuardEngine {
         if (lead > 0) windows.asSequence().map { it.start - lead }.filter { it > now }.minOrNull()?.let { candidates += it }
         val careLead = document.care.safeLeadMinutes * 60_000L
         if (document.lock.enabled) {
-            windows.flatMap { listOf(it.classStart, it.classEnd,
+            lockWindows.flatMap { listOf(it.classStart, it.classEnd,
                 minOf(it.classEnd, it.classStart + document.lock.safeGraceSeconds * 1000L)) }
                 .filter { it > now }.minOrNull()?.let { candidates += it }
             if (document.lock.lockOnManualProtect && document.manualUntil > now) {
@@ -337,7 +342,7 @@ class GuardService : Service() {
                     getSystemService(NotificationManager::class.java)?.notify(FOREGROUND_ID, notification)
                 }
                 // Idle means: no enabled rules, no manual session, no active window.
-                if (doc != null && doc.rules.none { it.enabled } && doc.manualUntil <= System.currentTimeMillis() &&
+                if (doc != null && !doc.lock.enabled && doc.rules.none { it.enabled } && doc.manualUntil <= System.currentTimeMillis() &&
                     result.endAt == null && result.title == "未生效") {
                     stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
                 }

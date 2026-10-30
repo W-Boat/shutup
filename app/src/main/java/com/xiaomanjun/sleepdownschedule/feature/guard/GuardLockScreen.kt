@@ -89,12 +89,22 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
             GlassPreferenceSection("上课锁机") {
                 SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
                     SettingsInfoRow("当前锁机状态", when {
+                        doc?.lock?.enabled != true -> "未启用"
+                        status.errors.isNotEmpty() && !session.active -> status.errors.joinToString("\n")
+                        !session.active && status.lockWindows.any { it.classStart > System.currentTimeMillis() } -> {
+                            val next = status.lockWindows.first { it.classStart > System.currentTimeMillis() }
+                            "已启用 · 下次 ${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(next.classStart))} ${next.reason}，上课时提醒"
+                        }
+                        !session.active && status.lockWindows.isEmpty() -> "暂无可锁机课程，请检查开学日期、课程时间和课程黑白名单；无需创建声音规则"
                         !session.active -> "未进入锁机时段"
                         session.skipped -> "本次不锁机"
                         session.decided -> "已锁定 · 页面已进入且系统锁任务已确认"
                         session.pendingEntry -> "等待进入 · 系统尚未确认锁定，请从通知进入"
                         else -> "等待决定 · ${session.courseName}"
                     })
+                    if (doc?.lock?.enabled == true) GuardLockController.notificationProblem(context)?.let {
+                        SettingsInfoRow("无法显示锁机提醒", it)
+                    }
                     if (session.active && !session.skipped && !session.decided) {
                         SettingsActionRow("进入本次锁机", "通知关闭或后台启动受限时，可从这里进入并确认系统锁任务",
                             "进入", backdrop = backdrop) { GuardLockController.launch(context) }

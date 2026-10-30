@@ -31,7 +31,7 @@ internal fun LazyListScope.lockCourseScopeItems(
             SettingsGroup(backdrop, config, Modifier.fillMaxWidth()) {
                 SettingsInfoRow("课程白名单 ${doc.lock.courseAllowlist.size} · 黑名单 ${doc.lock.courseDenylist.size}",
                     "白名单为空：全部课表课程参与锁机，但排除黑名单。白名单非空：只对选中的课程锁机，黑名单优先。" +
-                        "\n只筛选已启用课表规则产生的锁机时段，不影响静音、AI 关怀、固定时段或手动保护。")
+                        "\n独立读取所有课表，无需建立声音保护规则；不影响静音、AI 关怀、固定时段或手动保护。")
                 if (missing > 0) SettingsInfoRow("有 $missing 项课程选择已失效",
                     "课表删除或覆盖导入可能生成新课程编号，请重新选择；失效白名单不会自动放宽成全部课程。")
                 SettingsActionRow("从课表选择课程", "已读取 ${courses.size} 条课程，可区分同名课程与不同课表",

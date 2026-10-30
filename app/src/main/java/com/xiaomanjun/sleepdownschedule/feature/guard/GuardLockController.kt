@@ -28,6 +28,18 @@ internal object GuardLockController {
     const val ExpiresAt = "lock_expires_at"
     private var lastLaunch = 0L
 
+    fun notificationProblem(context: Context): String? {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return "系统通知服务不可用"
+        if (!manager.areNotificationsEnabled()) return "锁机通知未授权，请在权限管理中开启通知"
+        if (manager.getNotificationChannel(ChannelId)?.importance == NotificationManager.IMPORTANCE_NONE)
+            return "上课锁机通知渠道已关闭，请在系统通知设置中开启"
+        return null
+    }
+
+    internal fun startPendingIntent(context: Context, window: ProtectionWindow): PendingIntent = PendingIntent.getActivity(
+        context, 7327, GuardLockActivity.intent(context, window.classKey).putExtra(ExpiresAt, window.classEnd),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
     fun tick(context: Context, document: GuardDocument, windows: List<ProtectionWindow>, now: Long) {
         val store = LockStore(context)
         if (!document.lock.enabled || document.bypassUntil > now || document.skipUntil > now) {
@@ -66,7 +78,8 @@ internal object GuardLockController {
                 requestEntry = it.pendingEntry && !old.pendingEntry
             }
         }
-        if (created || requestEntry) {
+        // Reconcile also retries after notification permission/channel is restored.
+        if (created || requestEntry || (session.active && !session.decided && !session.skipped)) {
             notifyDecision(context, active, document.lock.safeGraceSeconds, session.pendingEntry)
         }
         if (session.active && requestEntry && now - lastLaunch >= 30_000L) {
@@ -153,7 +166,7 @@ internal object GuardLockController {
         Notification.Action.Builder(
             Icon.createWithResource(context, R.drawable.ic_snow_guard),
             title,
-            PendingIntent.getService(
+            if (action == "lock_start") startPendingIntent(context, window) else PendingIntent.getService(
                 context, request,
                 Intent(context, GuardService::class.java).setAction(action)
                     .setData(android.net.Uri.parse("shutup://lock/action/${android.net.Uri.encode(window.classKey)}/$action"))
