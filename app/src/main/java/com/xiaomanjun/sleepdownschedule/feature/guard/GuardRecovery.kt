@@ -12,7 +12,7 @@ internal object GuardRecovery {
     fun lastExit(context: android.content.Context): String = runCatching {
         val exit = context.getSystemService(android.app.ActivityManager::class.java)
             ?.getHistoricalProcessExitReasons(context.packageName, 0, 1)?.firstOrNull()
-            ?: return "系统暂无可读取的进程退出记录"
+            ?: return@runCatching "系统暂无可读取的进程退出记录"
         val reason = when (exit.reason) {
             android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "系统内存不足"
             android.app.ApplicationExitInfo.REASON_CRASH -> "应用崩溃"
