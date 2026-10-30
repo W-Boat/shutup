@@ -206,7 +206,7 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
                         ) { showAllApps = !showAllApps }
                         if (showAllApps) {
                             val apps = remember(showAllApps) { launchableApps(context) }
-                            apps.take(40).forEach { (pkg, label) ->
+                            apps.forEach { (pkg, label) ->
                                 SettingsToggleRow(
                                     title = label,
                                     subtitle = pkg,

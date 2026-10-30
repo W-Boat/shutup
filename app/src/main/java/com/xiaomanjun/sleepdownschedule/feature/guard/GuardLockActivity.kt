@@ -1,6 +1,7 @@
 ﻿package com.xiaomanjun.sleepdownschedule.feature.guard
 
 import android.app.ActivityManager
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -62,6 +63,7 @@ class GuardLockActivity : ComponentActivity() {
     private val lockStore by lazy { LockStore(this) }
     @Volatile private var launchingAllowed = false
     @Volatile private var exiting = false
+    private var verifyingKiosk = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,17 +90,47 @@ class GuardLockActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!GuardLockController.entered(this, intent.getStringExtra(GuardLockController.WindowKey).orEmpty())) finishLock() else tryKiosk()
-    }
-
-    private fun tryKiosk() {
-        runCatching {
+        if (verifyingKiosk || exiting) return
+        verifyingKiosk = true
+        lifecycleScope.launch {
+            val key = intent.getStringExtra(GuardLockController.WindowKey).orEmpty()
+            val session = lockStore.session()
+            if (!com.xiaomanjun.sleepdownschedule.domain.guard.LockStateMachine.valid(session, key, System.currentTimeMillis()) || session.skipped) {
+                finishLock(); return@launch
+            }
             val manager = getSystemService(ActivityManager::class.java)
-            if (manager?.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) startLockTask()
+            val managed = getSystemService(DevicePolicyManager::class.java)?.isLockTaskPermitted(packageName) == true
+            val expected = if (managed) ActivityManager.LOCK_TASK_MODE_LOCKED else ActivityManager.LOCK_TASK_MODE_PINNED
+            val started = runCatching {
+                if (manager?.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) startLockTask()
+            }.isSuccess
+            var verified = false
+            if (started) {
+                repeat(40) {
+                    if (manager?.lockTaskModeState == expected) verified = true
+                    if (!verified) delay(250)
+                }
+            }
+            if (verified && androidx.lifecycle.Lifecycle.State.RESUMED == lifecycle.currentState &&
+                GuardLockController.entered(this@GuardLockActivity, key)) {
+                verifyingKiosk = false
+            } else {
+                lockStore.transition { old ->
+                    if (old.windowKey == key) old.copy(decided = false, pendingEntry = true) else old
+                }
+                Toast.makeText(this@GuardLockActivity, "${if (managed) "受管锁任务" else "屏幕固定"}未确认，仍在等待进入，可从通知重试", Toast.LENGTH_LONG).show()
+                finishLock()
+            }
         }
     }
 
     private fun openAllowedApp(packageName: String) {
+        val mode = getSystemService(ActivityManager::class.java)?.lockTaskModeState
+        val permitted = getSystemService(DevicePolicyManager::class.java)?.isLockTaskPermitted(packageName) == true
+        if (mode == ActivityManager.LOCK_TASK_MODE_PINNED || (mode == ActivityManager.LOCK_TASK_MODE_LOCKED && !permitted)) {
+            Toast.makeText(this, "普通屏幕固定不能切换应用；受管设备还需管理员授权该白名单应用", Toast.LENGTH_LONG).show()
+            return
+        }
         val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return
         launchingAllowed = true
         runCatching { startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -125,12 +157,12 @@ class GuardLockActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (!launchingAllowed && !exiting) bringBack()
+        if (!launchingAllowed && !exiting && GuardLockController.isLocked(this)) bringBack()
     }
 
     override fun onStop() {
         super.onStop()
-        if (!launchingAllowed && !exiting && lockStore.session().active && !isChangingConfigurations) {
+        if (!launchingAllowed && !exiting && GuardLockController.isLocked(this) && !isChangingConfigurations) {
             window.decorView.postDelayed({ if (!launchingAllowed && !exiting) bringBack() }, 400)
         }
     }
@@ -196,7 +228,7 @@ private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit
             modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
         )
         MiuixText(
-            text = "锁机中 · 还剩 ${formatRemaining(remaining)}",
+            text = "${if (session.decided) "已锁定" else "等待进入 · 请确认系统屏幕固定"} · 还剩 ${formatRemaining(remaining)}",
             fontSize = 15.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()

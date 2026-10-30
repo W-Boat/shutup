@@ -40,6 +40,7 @@ internal object GuardLockController {
         }
         val key = active.classKey
         var created = false
+        var requestEntry = false
         val session = store.transition { old ->
             val next = LockStateMachine.begin(old,
                 LockSession(
@@ -54,12 +55,14 @@ internal object GuardLockController {
                     skipped = false
                 ), store.exitedWindows())
             created = next.windowKey != old.windowKey
-            LockStateMachine.timeout(next, now, document.lock.autoLockOnTimeout)
+            LockStateMachine.timeout(next, now, document.lock.autoLockOnTimeout).also {
+                requestEntry = it.pendingEntry && !old.pendingEntry
+            }
         }
         if (created) {
             notifyDecision(context, active, document.lock.safeGraceSeconds)
         }
-        if (session.active && session.pendingEntry && now - lastLaunch >= 30_000L) {
+        if (session.active && requestEntry && now - lastLaunch >= 30_000L) {
             lastLaunch = now
             launch(context)
         }
