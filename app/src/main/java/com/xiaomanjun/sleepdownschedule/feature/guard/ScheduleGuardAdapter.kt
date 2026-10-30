@@ -30,7 +30,7 @@ internal suspend fun ScheduleRepository.guardLessons(document: GuardDocument, no
                 val end = segments.maxOf { it.end }
                 if (end <= start) return@mapNotNull null
                 LessonOccurrence(id, course.name, date.atTime(start).atZone(zone).toInstant().toEpochMilli(),
-                    date.atTime(end).atZone(zone).toInstant().toEpochMilli())
+                    date.atTime(end).atZone(zone).toInstant().toEpochMilli(), course.id)
             }
         }
     }

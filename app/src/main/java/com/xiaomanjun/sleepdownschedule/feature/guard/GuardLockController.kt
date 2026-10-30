@@ -14,6 +14,7 @@ import com.xiaomanjun.sleepdownschedule.domain.guard.GuardDocument
 import com.xiaomanjun.sleepdownschedule.domain.guard.ProtectionWindow
 import com.xiaomanjun.sleepdownschedule.domain.guard.LockSession
 import com.xiaomanjun.sleepdownschedule.domain.guard.LockStateMachine
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockCourseScope
 import kotlinx.coroutines.flow.first
 
 /**
@@ -36,7 +37,8 @@ internal object GuardLockController {
         val manual = if (document.lock.lockOnManualProtect && document.manualUntil > now)
             ProtectionWindow("manual", "手动保护", document.selectedTemplateId.orEmpty(),
                 document.manualUntil - 60 * 60_000L, document.manualUntil) else null
-        val active = (windows + listOfNotNull(manual)).filter { it.inClass(now) }.maxByOrNull { it.classEnd }
+        val active = (windows + listOfNotNull(manual)).filter { it.inClass(now) && LockCourseScope.allows(document.lock, it) }
+            .maxByOrNull { it.classEnd }
         if (active == null) {
             finishSession(context)
             return

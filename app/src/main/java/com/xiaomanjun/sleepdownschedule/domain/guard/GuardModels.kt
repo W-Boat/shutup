@@ -119,9 +119,10 @@ data class GuardDocument(
     }
 }
 
-data class LessonOccurrence(val scheduleId: Int, val name: String, val start: Long, val end: Long)
+data class LessonOccurrence(val scheduleId: Int, val name: String, val start: Long, val end: Long, val courseId: Long? = null)
 data class ProtectionWindow(val ruleId: String, val reason: String, val templateId: String, val start: Long, val end: Long,
-    val classStart: Long = start, val classEnd: Long = end, val isCourse: Boolean = false) {
+    val classStart: Long = start, val classEnd: Long = end, val isCourse: Boolean = false,
+    val courseKey: String? = null) {
     fun contains(now: Long) = now >= start && now < end
     fun inClass(now: Long) = now >= classStart && now < classEnd
     val classKey: String get() = "$ruleId|$classStart"
@@ -140,7 +141,7 @@ object RuleCompiler {
                 lessons.filter { it.scheduleId == rule.scheduleId && valid(Instant.ofEpochMilli(it.start).atZone(zone).toLocalDate()) }
                     .map { ProtectionWindow(rule.id, it.name, rule.templateId,
                         it.start - rule.leadMinutes * 60_000L, it.end + rule.tailMinutes * 60_000L,
-                        it.start, it.end, true) }
+                        it.start, it.end, true, it.courseId?.let { courseId -> LockCourseScope.key(it.scheduleId, courseId) }) }
             } else dates.filter { it.dayOfWeek.value in rule.weekdays && valid(it) }.map { date ->
                 val allDay = rule.trigger == Trigger.ALL_DAY
                 val start = if (allDay) date.atStartOfDay(zone) else date.atTime(LocalTime.parse(rule.start)).atZone(zone)

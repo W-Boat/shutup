@@ -19,13 +19,18 @@ data class LockSettings(
     val lockOnManualProtect: Boolean = false,
     val allowedPackages: List<String> = emptyList(),
     val quotePack: String = "calm",
-    val customQuote: String = ""
+    val customQuote: String = "",
+    /** Stable schedule:course IDs. Empty allowlist means all timetable courses except denied ones. */
+    val courseAllowlist: List<String> = emptyList(),
+    val courseDenylist: List<String> = emptyList()
 ) {
     fun validate() {
         require(graceSeconds in 30..900) { "锁机决定时间应为 30—900 秒" }
         require(monthlyExitQuota in 1..10) { "每月退出次数应为 1—10 次" }
         require(allowedPackages.size <= 60) { "白名单应用过多" }
         require(customQuote.length <= 200) { "自定义句子过长" }
+        require(courseAllowlist.size <= 2000 && courseDenylist.size <= 2000) { "锁机课程选择过多" }
+        require((courseAllowlist + courseDenylist).all { it.isNotBlank() && it.length <= 80 }) { "锁机课程标识无效" }
     }
 
     /** 归一化到默认值范围内的安全读法，供运行时使用。 */

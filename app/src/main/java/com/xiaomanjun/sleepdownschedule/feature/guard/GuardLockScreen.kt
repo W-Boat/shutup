@@ -54,6 +54,9 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
     val visualConfig = settingsVisualConfig(state.config)
     var document by remember { mutableStateOf<GuardDocument?>(null) }
     val status by GuardEngine.status.collectAsState()
+    val courseSchedules by (context.applicationContext as com.xiaomanjun.sleepdownschedule.CourseScheduleApp)
+        .repository.allSchedulesState.collectAsState(initial = state)
+    var showCourseScope by remember { mutableStateOf(false) }
     val session by androidx.compose.runtime.produceState(com.xiaomanjun.sleepdownschedule.domain.guard.LockSession()) {
         while (true) {
             value = lockStore.session().let {
@@ -180,6 +183,8 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
                 }
             }
         }
+        lockCourseScopeItems(document, courseSchedules, showCourseScope, { showCourseScope = !showCourseScope },
+            backdrop, visualConfig) { change -> mutate(change) }
         item(key = "lock-quotes") {
             document?.let { doc ->
                 GlassPreferenceSection("静心句子") {
