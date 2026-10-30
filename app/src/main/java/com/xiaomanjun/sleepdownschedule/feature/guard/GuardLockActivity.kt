@@ -183,7 +183,7 @@ class GuardLockActivity : ComponentActivity() {
 
     private fun bringBack() {
         val manager = getSystemService(ActivityManager::class.java) ?: return
-        runCatching { manager.appTasks.firstOrNull { it.taskInfo.taskId == taskId }?.moveToFront() }
+        runCatching { manager.appTasks.firstOrNull { it.taskInfo?.taskId == taskId }?.moveToFront() }
     }
 
     companion object {
