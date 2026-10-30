@@ -12,12 +12,5 @@ for apk in "$@"; do
   fi
   printf '%s\n' "$(basename "$apk")"
   cat "$report"
-  python3 - "$report" "$expected" <<'PY'
-import pathlib, re, sys
-report = pathlib.Path(sys.argv[1]).read_text()
-# New SDKs qualify signer labels by supported SDK range and may print the same identity twice.
-actual = set(s.lower() for s in re.findall(r'(?mi)^\s*Signer[^\n]*certificate SHA-256 digest:\s*([a-f0-9]{64})\b', report))
-if actual != {sys.argv[2]}:
-    raise SystemExit(f'Signing identity mismatch; observed certificate digests: {sorted(actual)}')
-PY
+  python3 "$(dirname "$0")/verify_apk_certificate.py" "$report" "$expected"
 done

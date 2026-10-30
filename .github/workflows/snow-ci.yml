@@ -28,6 +28,9 @@ jobs:
         uses: ./.github/actions/setup-snow-signing
         with:
           keystore-base64: ${{ secrets.SNOW_KEYSTORE_BASE64 }}
+      # The parser contract runs first so SDK-output changes fail before an expensive APK build.
+      - name: Verify signature parser formats
+        run: python3 scripts/test_apk_certificate.py
       - name: Unit tests
         shell: bash
         run: |
