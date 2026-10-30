@@ -1,2 +1,5 @@
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/ic_snow_leopard_flat" android:gravity="fill" />
+<!-- Framework-only legacy icon. Compose consumers use the direct raster via currentIconResId. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/snow_icon_background" />
+    <item android:drawable="@drawable/ic_snow_launcher_foreground" />
+</layer-list>

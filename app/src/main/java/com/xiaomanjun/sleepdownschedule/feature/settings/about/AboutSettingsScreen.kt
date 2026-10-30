@@ -106,6 +106,7 @@ fun AboutSettingsScreen(state: AppState, backdrop: Backdrop?) {
                         modifier = Modifier
                             .size(64.dp)
                             .clip(RoundedRectangle(18.dp))
+                            .background(ComposeColor(0xFF45AFB5))
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(

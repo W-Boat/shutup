@@ -338,7 +338,7 @@ internal fun HomeSidebar(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Image(
                                 painterResource(currentIconResId(LocalContext.current, !lightGlass)), null,
-                                Modifier.size(28.dp).clip(RoundedRectangle(7.dp))
+                                Modifier.size(28.dp).clip(RoundedRectangle(7.dp)).background(Color(0xFF45AFB5))
                             )
                             Text(stringResource(R.string.app_name), color = ink, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)

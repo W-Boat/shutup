@@ -188,6 +188,7 @@ fun SettingsRootScreen(
                                 .padding(end = 10.dp)
                                 .size(56.dp)
                                 .clip(RoundedRectangle(16.dp))
+                                .background(ComposeColor(0xFF45AFB5))
                         )
                     },
                     endActions = {

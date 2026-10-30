@@ -1,3 +1,5 @@
-<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="10dp">
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="16%" android:insetTop="16%"
+    android:insetRight="16%" android:insetBottom="16%">
     <bitmap android:src="@drawable/ic_snow_leopard_flat" android:gravity="fill" />
 </inset>

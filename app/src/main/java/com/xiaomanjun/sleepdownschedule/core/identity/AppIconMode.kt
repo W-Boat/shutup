@@ -81,25 +81,9 @@ fun currentIconResId(
     return com.xiaomanjun.sleepdownschedule.R.drawable.ic_snow_leopard_flat
 }
 
-/** Fixed full-color drawable aliases for SystemUI, sharing each explicit light/dark PNG. */
+/** Keep promoted notifications and in-app previews on the same direct raster artwork. */
 fun currentLiveUpdateIconResId(context: Context): Int {
-    val dark = when (AppIconManager.currentMode(context)) {
-        AppIconMode.LIGHT -> false
-        AppIconMode.DARK -> true
-        AppIconMode.FOLLOW_DARK_MODE -> AppIconManager.currentDarkTheme(context)
-    }
-    return when (AppIconManager.currentStyle(context)) {
-        AppIconStyle.MINIMAL -> if (dark) {
-            com.xiaomanjun.sleepdownschedule.R.drawable.ic_live_update_minimal_dark
-        } else {
-            com.xiaomanjun.sleepdownschedule.R.drawable.ic_live_update_minimal_light
-        }
-        AppIconStyle.KANBAN -> if (dark) {
-            com.xiaomanjun.sleepdownschedule.R.drawable.ic_live_update_kanban_dark
-        } else {
-            com.xiaomanjun.sleepdownschedule.R.drawable.ic_live_update_kanban_light
-        }
-    }
+    return currentIconResId(context)
 }
 
 object AppIconManager {
