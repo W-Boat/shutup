@@ -69,7 +69,6 @@ class GuardLockActivity : ComponentActivity() {
                 Toast.makeText(this@GuardLockActivity, "锁机中，先完成这一节", Toast.LENGTH_SHORT).show()
             }
         })
-        tryKiosk()
         setContent {
             CourseScheduleTheme {
                 MiuixTheme {
@@ -81,6 +80,11 @@ class GuardLockActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!GuardLockController.entered(this)) finishLock() else tryKiosk()
     }
 
     private fun tryKiosk() {

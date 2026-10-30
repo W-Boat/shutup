@@ -20,7 +20,8 @@ class LockStore(context: Context) {
         val startedAt: Long = 0,
         val graceEndsAt: Long = 0,
         val decided: Boolean = false,
-        val skipped: Boolean = false
+        val skipped: Boolean = false,
+        val pendingEntry: Boolean = false
     )
 
     fun session(): Session = Session(
@@ -32,7 +33,8 @@ class LockStore(context: Context) {
         startedAt = prefs.getLong("started_at", 0),
         graceEndsAt = prefs.getLong("grace_ends_at", 0),
         decided = prefs.getBoolean("decided", false),
-        skipped = prefs.getBoolean("skipped", false)
+        skipped = prefs.getBoolean("skipped", false),
+        pendingEntry = prefs.getBoolean("pending_entry", false)
     )
 
     fun save(session: Session) {
@@ -46,11 +48,12 @@ class LockStore(context: Context) {
             .putLong("grace_ends_at", session.graceEndsAt)
             .putBoolean("decided", session.decided)
             .putBoolean("skipped", session.skipped)
+            .putBoolean("pending_entry", session.pendingEntry)
             .apply()
     }
 
     fun clear() {
-        prefs.edit().putBoolean("active", false).putBoolean("decided", false).putBoolean("skipped", false).apply()
+        prefs.edit().putBoolean("active", false).putBoolean("decided", false).putBoolean("skipped", false).putBoolean("pending_entry", false).apply()
     }
 
     private fun currentMonth(): String = YearMonth.now().toString()

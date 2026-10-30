@@ -61,7 +61,7 @@ internal object GuardLockController {
             return
         }
         if (!session.decided && !session.skipped && now >= session.graceEndsAt && document.lock.autoLockOnTimeout) {
-            store.save(session.copy(decided = true))
+            store.save(session.copy(pendingEntry = true))
             launch(context)
         }
     }
@@ -70,8 +70,8 @@ internal object GuardLockController {
         val store = LockStore(context)
         val session = store.session()
         if (!session.active) return
-        store.save(session.copy(decided = true, skipped = !lock))
-        runCatching { context.getSystemService(NotificationManager::class.java)?.cancel(DecisionNotificationId) }
+        store.save(session.copy(decided = false, skipped = !lock, pendingEntry = lock))
+        if (!lock) runCatching { context.getSystemService(NotificationManager::class.java)?.cancel(DecisionNotificationId) }
         if (lock) launch(context)
     }
 
@@ -79,6 +79,15 @@ internal object GuardLockController {
         val session = LockStore(context).session()
         return session.active && session.decided && !session.skipped &&
             session.endsAt > System.currentTimeMillis()
+    }
+
+    /** Only a resumed Activity can acknowledge that the lock screen is actually visible. */
+    fun entered(context: Context): Boolean {
+        val store = LockStore(context)
+        val session = store.session()
+        if (!session.active || session.skipped || session.endsAt <= System.currentTimeMillis()) return false
+        store.save(session.copy(decided = true, pendingEntry = false))
+        return true
     }
 
     fun launch(context: Context) {
