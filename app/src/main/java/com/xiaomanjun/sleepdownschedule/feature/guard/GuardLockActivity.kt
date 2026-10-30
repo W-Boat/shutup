@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,9 @@ import com.xiaomanjun.sleepdownschedule.CourseScheduleTheme
 import com.xiaomanjun.sleepdownschedule.data.guard.GuardStore
 import com.xiaomanjun.sleepdownschedule.data.guard.LockStore
 import com.xiaomanjun.sleepdownschedule.domain.guard.LockQuotes
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockSettings
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -103,17 +107,19 @@ class GuardLockActivity : ComponentActivity() {
     }
 
     private fun requestExit() {
-        val document = kotlinx.coroutines.runBlocking { withContext(Dispatchers.IO) { GuardStore(this@GuardLockActivity).document.first() } }
+        lifecycleScope.launch {
+        val document = GuardStore(this@GuardLockActivity).document.first()
         val quota = document.lock.safeQuota
         val session = lockStore.session()
-        if (lockStore.exit(session.windowKey, System.currentTimeMillis(), quota)) {
+        if (withContext(Dispatchers.IO) { lockStore.exit(session.windowKey, System.currentTimeMillis(), quota) }) {
             exiting = true
             runCatching { stopLockTask() }
-            Toast.makeText(this, "已使用一次退出机会，本月剩余 ${lockStore.exitsLeft(quota)} 次", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@GuardLockActivity, "已使用一次退出机会，本月剩余 ${lockStore.exitsLeft(quota)} 次", Toast.LENGTH_LONG).show()
             finishAndRemoveTask()
-            startActivity(Intent(this, SnowLeopardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(Intent(this@GuardLockActivity, SnowLeopardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } else {
-            Toast.makeText(this, "本月 3 次直接退出已用完，请继续这一节课", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@GuardLockActivity, "本月 $quota 次直接退出已用完，请继续这一节课", Toast.LENGTH_LONG).show()
+        }
         }
     }
 
@@ -153,6 +159,12 @@ class GuardLockActivity : ComponentActivity() {
 private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit, onStay: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val lockStore = remember { LockStore(context) }
+    val settings by produceState(LockSettings()) {
+        GuardStore(context).document.collect { value = it.lock }
+    }
+    val allowed by produceState(emptyList<Pair<String, String>>(), settings.allowedPackages) {
+        value = withContext(Dispatchers.IO) { allowedApps(context, settings.allowedPackages) }
+    }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var message by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -192,9 +204,7 @@ private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit
         Card(Modifier.fillMaxWidth().wrapContentHeight(), insideMargin = PaddingValues(20.dp)) {
             MiuixText(
                 text = LockQuotes.quote(
-                    settings = kotlinx.coroutines.runBlocking {
-                        withContext(Dispatchers.IO) { GuardStore(context).document.first().lock }
-                    },
+                    settings = settings,
                     seed = now
                 ),
                 fontSize = 18.sp,
@@ -203,7 +213,6 @@ private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit
                 modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
             )
         }
-        val allowed = remember(session.windowKey) { allowedApps(context) }
         if (allowed.isNotEmpty()) {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
                 MiuixText("白名单应用", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -217,9 +226,7 @@ private fun GuardLockContent(onOpenAllowed: (String) -> Unit, onExit: () -> Unit
                 }
             }
         }
-        val quota = kotlinx.coroutines.runBlocking {
-            withContext(Dispatchers.IO) { GuardStore(context).document.first().lock.safeQuota }
-        }
+        val quota = settings.safeQuota
         val left = lockStore.exitsLeft(quota)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
             MiuixText(
@@ -244,11 +251,8 @@ private fun formatRemaining(seconds: Long): String {
     return "%02d:%02d".format(m, s)
 }
 
-private fun allowedApps(context: Context): List<Pair<String, String>> = runCatching {
-    val document = kotlinx.coroutines.runBlocking {
-        withContext(Dispatchers.IO) { GuardStore(context).document.first() }
-    }
-    document.lock.allowedPackages.mapNotNull { pkg ->
+private fun allowedApps(context: Context, packages: List<String>): List<Pair<String, String>> = runCatching {
+    packages.mapNotNull { pkg ->
         runCatching {
             val info = context.packageManager.getApplicationInfo(pkg, 0)
             pkg to context.packageManager.getApplicationLabel(info).toString()

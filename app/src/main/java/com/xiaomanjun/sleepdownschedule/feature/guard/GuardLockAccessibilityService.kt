@@ -5,8 +5,8 @@ import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import com.xiaomanjun.sleepdownschedule.data.guard.GuardStore
 import com.xiaomanjun.sleepdownschedule.data.guard.LockStore
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockSettings
+import kotlinx.coroutines.*
 
 /**
  * 锁机期间把非白名单应用切回锁机页。
@@ -14,6 +14,14 @@ import kotlinx.coroutines.runBlocking
  * 只订阅窗口切换事件，不读取页面内容（canRetrieveWindowContent=false），隐私面最小化。
  */
 class GuardLockAccessibilityService : AccessibilityService() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var settings: LockSettings? = null
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        scope.launch { GuardStore(this@GuardLockAccessibilityService).document.collect { settings = it.lock } }
+    }
+
+    override fun onDestroy() { scope.cancel(); super.onDestroy() }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString().orEmpty()
@@ -22,11 +30,9 @@ class GuardLockAccessibilityService : AccessibilityService() {
         val session = LockStore(this).session()
         if (!session.active || !session.decided || session.skipped) return
         if (session.endsAt in 1 until System.currentTimeMillis()) return
-        val document = runCatching {
-            runBlocking { GuardStore(this@GuardLockAccessibilityService).document.first() }
-        }.getOrNull() ?: return
-        if (!document.lock.enabled) return
-        if (pkg in document.lock.allowedPackages) return
+        val lock = settings ?: return
+        if (!lock.enabled) return
+        if (pkg in lock.allowedPackages) return
         runCatching {
             startActivity(
                 GuardLockActivity.intent(this, session.windowKey)
