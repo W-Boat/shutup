@@ -67,18 +67,27 @@ internal object GuardRootBridge {
     /** Hard volume write; the caller re-reads AudioManager to confirm the system accepted it. */
     fun setStreamVolume(context: Context, stream: Int, index: Int): Boolean {
         if (!isAuthorized(context)) return false
-        val result = run("cmd media_session volume --stream $stream --set $index") ?: return false
-        return result.exitCode == 0
+        return controlResult(context, run("cmd media_session volume --stream $stream --set $index"))
     }
 
     fun setBrightness(context: Context, value: Int): Boolean {
         if (!isAuthorized(context)) return false
-        return run("settings put system screen_brightness ${value.coerceIn(0, 255)}")?.exitCode == 0
+        return controlResult(context, run("settings put system screen_brightness ${value.coerceIn(0, 255)}"))
     }
 
     fun setBrightnessMode(context: Context, value: Int): Boolean {
         if (!isAuthorized(context) || value !in 0..1) return false
-        return run("settings put system screen_brightness_mode $value")?.exitCode == 0
+        return controlResult(context, run("settings put system screen_brightness_mode $value"))
+    }
+
+    private fun controlResult(context: Context, result: RootResult?): Boolean {
+        if (result?.exitCode == 0) return true
+        // A stored grant cannot prove su is still available. Stop using the failing bridge until
+        // the user explicitly authorizes it again; the audio backend falls back to public APIs.
+        cached = false
+        context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).edit()
+            .putBoolean(Authorized, false).putLong(CheckedAt, System.currentTimeMillis()).apply()
+        return false
     }
 
     fun whitelistBattery(context: Context): Boolean {

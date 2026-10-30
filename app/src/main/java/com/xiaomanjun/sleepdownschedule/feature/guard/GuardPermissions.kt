@@ -14,6 +14,10 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -188,6 +192,7 @@ internal object GuardPermissions {
 @Composable
 fun GuardPermissionsScreen(state: AppState, backdrop: Backdrop?) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val visualConfig = settingsVisualConfig(state.config)
     // 从系统设置页返回后重新计算状态，避免「授权完了还显示未授权」。
     val refreshTick = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -221,10 +226,12 @@ fun GuardPermissionsScreen(state: AppState, backdrop: Backdrop?) {
                         ) {
                             when (permission.id) {
                                 "root" -> {
-                                    Thread {
-                                        GuardRootBridge.requestAuthorization(context)
-                                        GuardRootBridge.whitelistBattery(context)
-                                    }.start()
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            if (GuardRootBridge.requestAuthorization(context)) GuardRootBridge.whitelistBattery(context)
+                                        }
+                                        refreshTick.intValue++
+                                    }
                                 }
                                 else -> permission.action()
                             }
