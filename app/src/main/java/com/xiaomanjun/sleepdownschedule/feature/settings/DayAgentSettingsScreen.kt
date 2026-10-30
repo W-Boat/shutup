@@ -12,6 +12,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField as MaterialOutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import com.xiaomanjun.sleepdownschedule.feature.guard.*
+import com.xiaomanjun.sleepdownschedule.data.guard.GuardStore
+import com.xiaomanjun.sleepdownschedule.domain.guard.GuardDocument
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +56,17 @@ import kotlin.math.min
 @Composable
 fun DayAgentSettingsScreen(state: AppState, backdrop: Backdrop?) {
     val context = LocalContext.current
+    val guardStore = remember { GuardStore(context) }
+    val guardScope = rememberCoroutineScope()
+    var guardDocument by remember { mutableStateOf<GuardDocument?>(null) }
+    val guardStatus by GuardEngine.status.collectAsState()
+    var guardMessage by remember { mutableStateOf<String?>(null) }
+    var showGuardApi by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        try { guardStore.document.collect { guardDocument = it } }
+        catch (e: Exception) { guardMessage = e.message }
+    }
+    if (showGuardApi) ApiEditor(onDismiss = { showGuardApi = false }, onMessage = { guardMessage = it })
     var enabled by remember { mutableStateOf(DayAgentPreferences.isEnabled(context)) }
     var weekAssistantEnabled by remember { mutableStateOf(DayAgentPreferences.isWeekAssistantEnabled(context)) }
     var weatherEnabled by remember { mutableStateOf(DayAgentPreferences.isWeatherEnabled(context)) }
@@ -65,6 +83,23 @@ fun DayAgentSettingsScreen(state: AppState, backdrop: Backdrop?) {
         contentTopPadding = topPadding,
         contentBottomPadding = DockScrollPadding
     ) {
+        guardCareItems(guardDocument, guardStatus.windows.filter { it.isCourse }.map { it.reason }.distinct(),
+            backdrop, state.config) { transform ->
+            guardScope.launch {
+                try { guardStore.update(transform); GuardEngine.start(context) }
+                catch (e: Exception) { guardMessage = e.message }
+            }
+        }
+        item(key = "assistant-guard-rules") {
+            guardDocument?.let { doc ->
+                GlassPreferenceSection("用对话安排安静") {
+                    SettingsGroup(backdrop = backdrop, config = state.config, modifier = Modifier.fillMaxWidth()) {
+                        GuardAiPanel(doc, showConfig = { showGuardApi = true }, onError = { guardMessage = it })
+                        guardMessage?.let { SettingsInfoRow("提示", it) }
+                    }
+                }
+            }
+        }
         item {
             GlassPreferenceSection("AI 助理") {
                 SettingsGroup(backdrop = backdrop, config = state.config, modifier = Modifier.fillMaxWidth()) {

@@ -484,15 +484,6 @@ fun GuardSettingsScreen(
                 }
             }
         }
-        item(key = "guard-ai") {
-            document?.let { doc ->
-                GlassPreferenceSection("AI 规则助手") {
-                    SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
-                        GuardAiPanel(doc, showConfig = { message = "请在 AI 设置中填写接口与密钥" }, onError = { message = it })
-                    }
-                }
-            }
-        }
         item(key = "guard-log") {
             if (message != null) {
                 GlassPreferenceSection("操作提示") {
