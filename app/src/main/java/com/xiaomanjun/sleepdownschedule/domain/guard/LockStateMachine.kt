@@ -33,8 +33,8 @@ object LockStateMachine {
         else -> session
     }
 
-    fun begin(previous: LockSession, candidate: LockSession, exited: Set<String>): LockSession = when {
-        candidate.windowKey in exited -> previous.copy(active = false, pendingEntry = false)
+    fun begin(previous: LockSession, candidate: LockSession, exited: Set<String>, legacyKeys: Set<String> = emptySet()): LockSession = when {
+        candidate.windowKey in exited || legacyKeys.any { it in exited } -> previous.copy(active = false, pendingEntry = false)
         previous.active && previous.windowKey == candidate.windowKey -> previous
         else -> candidate
     }

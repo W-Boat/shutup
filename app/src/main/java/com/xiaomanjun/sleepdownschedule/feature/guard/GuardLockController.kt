@@ -58,7 +58,7 @@ internal object GuardLockController {
                     graceEndsAt = minOf(active.classEnd, active.classStart + document.lock.safeGraceSeconds * 1000L),
                     decided = false,
                     skipped = false
-                ), store.exitedWindows())
+                ), store.exitedWindows(), setOf("${active.ruleId}|${active.start}", "${active.ruleId}|${active.classStart}"))
             created = next.windowKey != old.windowKey || (!old.active && next.active)
             val checked = if (next.decided && context.getSystemService(android.app.ActivityManager::class.java)?.lockTaskModeState == android.app.ActivityManager.LOCK_TASK_MODE_NONE)
                 next.copy(decided = false, pendingEntry = true) else next

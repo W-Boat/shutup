@@ -43,4 +43,9 @@ class LockStateMachineTest {
         assertTrue(next.skipped)
         assertFalse(next.pendingEntry)
     }
+    @Test fun courseIdentityUpgradeHonorsPreviouslyConsumedExit() {
+        val candidate = course.copy(windowKey = "course:1:10|1000")
+        assertFalse(LockStateMachine.begin(LockSession(), candidate, setOf("math|1000"), setOf("math|1000")).active)
+        assertTrue(LockStateMachine.begin(LockSession(), candidate, setOf("math|999"), setOf("math|1000")).active)
+    }
 }
