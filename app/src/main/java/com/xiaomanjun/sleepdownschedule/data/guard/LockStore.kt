@@ -1,30 +1,18 @@
 package com.xiaomanjun.sleepdownschedule.data.guard
 
 import android.content.Context
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockSession
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockStateMachine
 import java.time.YearMonth
 
-/**
- * 锁机会话与每月退出额度的持久化。
- *
- * 额度按自然月滚动；进程被杀、应用被强制停止都不会重置额度，避免「杀一次进程就多一次退出」。
- */
+/** All instances share one monitor. No caller may write a previously read session back. */
 class LockStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("shutup_lock", Context.MODE_PRIVATE)
+    companion object { private val monitor = Any() }
 
-    data class Session(
-        val active: Boolean = false,
-        val windowKey: String = "",
-        val courseName: String = "",
-        val reason: String = "",
-        val endsAt: Long = 0,
-        val startedAt: Long = 0,
-        val graceEndsAt: Long = 0,
-        val decided: Boolean = false,
-        val skipped: Boolean = false,
-        val pendingEntry: Boolean = false
-    )
+    fun session(): LockSession = synchronized(monitor) { read() }
 
-    fun session(): Session = Session(
+    private fun read() = LockSession(
         active = prefs.getBoolean("active", false),
         windowKey = prefs.getString("window_key", "").orEmpty(),
         courseName = prefs.getString("course", "").orEmpty(),
@@ -37,60 +25,48 @@ class LockStore(context: Context) {
         pendingEntry = prefs.getBoolean("pending_entry", false)
     )
 
-    fun save(session: Session) {
-        prefs.edit()
-            .putBoolean("active", session.active)
-            .putString("window_key", session.windowKey)
-            .putString("course", session.courseName)
-            .putString("reason", session.reason)
-            .putLong("ends_at", session.endsAt)
-            .putLong("started_at", session.startedAt)
-            .putLong("grace_ends_at", session.graceEndsAt)
-            .putBoolean("decided", session.decided)
-            .putBoolean("skipped", session.skipped)
-            .putBoolean("pending_entry", session.pendingEntry)
-            .apply()
+    private fun write(session: LockSession, edit: android.content.SharedPreferences.Editor = prefs.edit()) {
+        check(edit.putBoolean("active", session.active)
+            .putString("window_key", session.windowKey).putString("course", session.courseName)
+            .putString("reason", session.reason).putLong("ends_at", session.endsAt)
+            .putLong("started_at", session.startedAt).putLong("grace_ends_at", session.graceEndsAt)
+            .putBoolean("decided", session.decided).putBoolean("skipped", session.skipped)
+            .putBoolean("pending_entry", session.pendingEntry).commit()) { "锁机会话保存失败" }
     }
 
-    fun clear() {
-        prefs.edit().putBoolean("active", false).putBoolean("decided", false).putBoolean("skipped", false).putBoolean("pending_entry", false).apply()
+    fun transition(change: (LockSession) -> LockSession): LockSession = synchronized(monitor) {
+        val old = read()
+        change(old).also { if (it != old) write(it) }
     }
 
-    private fun currentMonth(): String = YearMonth.now().toString()
-
-    fun exitsUsed(): Int {
-        rollover()
-        return prefs.getInt("exits_used", 0)
-    }
-
-    fun exitsLeft(quota: Int): Int = (quota - exitsUsed()).coerceAtLeast(0)
-
-    /** Returns true when a direct exit was actually consumed. */
-    fun consumeExit(quota: Int): Boolean {
-        rollover()
-        val used = prefs.getInt("exits_used", 0)
-        if (used >= quota) return false
-        prefs.edit().putInt("exits_used", used + 1).putLong("last_exit", System.currentTimeMillis()).apply()
-        return true
-    }
-
-    fun resetExits() {
-        prefs.edit().putString("month", currentMonth()).putInt("exits_used", 0).apply()
-    }
-
-    /** 已经用退出机会结束过的窗口；同一节课不会再被拉回锁机。 */
-    fun exitedWindows(): Set<String> =
-        prefs.getStringSet("exited_windows", emptySet())?.toSet().orEmpty()
-
-    fun markExited(windowKey: String) {
-        val next = (exitedWindows() + windowKey).toList().takeLast(40).toSet()
-        prefs.edit().putStringSet("exited_windows", next).apply()
-    }
+    fun clear() { transition { it.copy(active = false, pendingEntry = false, decided = false, skipped = false) } }
 
     private fun rollover() {
-        val month = currentMonth()
-        if (prefs.getString("month", null) != month) {
-            prefs.edit().putString("month", month).putInt("exits_used", 0).apply()
-        }
+        val month = YearMonth.now().toString()
+        if (prefs.getString("month", null) != month)
+            check(prefs.edit().putString("month", month).putInt("exits_used", 0).commit())
+    }
+
+    fun exitsUsed(): Int = synchronized(monitor) { rollover(); prefs.getInt("exits_used", 0) }
+    fun exitsLeft(quota: Int): Int = (quota - exitsUsed()).coerceAtLeast(0)
+
+    /** Quota, session and suppression key commit together; a double tap cannot consume twice. */
+    fun exit(key: String, now: Long, quota: Int): Boolean = synchronized(monitor) {
+        rollover()
+        val old = read()
+        val used = prefs.getInt("exits_used", 0)
+        val next = LockStateMachine.exit(old, key, now, used, quota)
+        if (next == old) return@synchronized false
+        write(next, prefs.edit().putInt("exits_used", used + 1).putLong("last_exit", now)
+            .putStringSet("exited_windows", (exitedWindows() + key).toList().takeLast(200).toSet()))
+        true
+    }
+
+    fun resetExits() = synchronized(monitor) {
+        check(prefs.edit().putString("month", YearMonth.now().toString()).putInt("exits_used", 0).commit())
+    }
+
+    fun exitedWindows(): Set<String> = synchronized(monitor) {
+        prefs.getStringSet("exited_windows", emptySet())?.toSet().orEmpty()
     }
 }

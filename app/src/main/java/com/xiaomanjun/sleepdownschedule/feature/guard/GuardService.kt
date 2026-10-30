@@ -341,8 +341,9 @@ class GuardService : Service() {
                 when (val action = intent?.action) {
                     null, "reconcile" -> Unit
                     "toggle" -> GuardEngine.toggle(this@GuardService)
-                    "lock_start" -> GuardLockController.decide(this@GuardService, true)
-                    "lock_skip" -> GuardLockController.decide(this@GuardService, false)
+                    "lock_start", "lock_skip" -> GuardLockController.decide(this@GuardService,
+                        intent?.action == "lock_start", intent?.getStringExtra(GuardLockController.WindowKey).orEmpty(),
+                        intent?.getLongExtra(GuardLockController.ExpiresAt, 0) ?: 0)
                     else -> GuardEngine.command(this@GuardService, action)
                 }
             } catch (e: Exception) {

@@ -12,6 +12,8 @@ import com.xiaomanjun.sleepdownschedule.data.guard.GuardStore
 import com.xiaomanjun.sleepdownschedule.data.guard.LockStore
 import com.xiaomanjun.sleepdownschedule.domain.guard.GuardDocument
 import com.xiaomanjun.sleepdownschedule.domain.guard.ProtectionWindow
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockSession
+import com.xiaomanjun.sleepdownschedule.domain.guard.LockStateMachine
 import kotlinx.coroutines.flow.first
 
 /**
@@ -21,27 +23,26 @@ import kotlinx.coroutines.flow.first
 internal object GuardLockController {
     const val ChannelId = "shutup_lock"
     private const val DecisionNotificationId = 7325
+    const val WindowKey = "lock_window_key"
+    const val ExpiresAt = "lock_expires_at"
+    private var lastLaunch = 0L
 
     fun tick(context: Context, document: GuardDocument, windows: List<ProtectionWindow>, now: Long) {
         val store = LockStore(context)
-        val session = store.session()
         if (!document.lock.enabled) {
-            if (session.active) store.clear()
+            finishSession(context)
             return
         }
         val active = windows.filter { it.contains(now) }.maxByOrNull { it.end }
         if (active == null) {
-            if (session.active && now > session.endsAt) store.clear()
+            finishSession(context)
             return
         }
         val key = "${active.ruleId}|${active.start}"
-        if (key in store.exitedWindows()) {
-            if (session.active) store.clear()
-            return
-        }
-        if (!session.active || session.windowKey != key) {
-            store.save(
-                LockStore.Session(
+        var created = false
+        val session = store.transition { old ->
+            val next = LockStateMachine.begin(old,
+                LockSession(
                     active = true,
                     windowKey = key,
                     courseName = active.reason,
@@ -51,26 +52,29 @@ internal object GuardLockController {
                     graceEndsAt = now + document.lock.safeGraceSeconds * 1000L,
                     decided = false,
                     skipped = false
-                )
-            )
+                ), store.exitedWindows())
+            created = next.windowKey != old.windowKey
+            LockStateMachine.timeout(next, now, document.lock.autoLockOnTimeout)
+        }
+        if (created) {
             notifyDecision(context, active, document.lock.safeGraceSeconds)
-            return
         }
-        if (now > session.endsAt) {
-            store.clear()
-            return
-        }
-        if (!session.decided && !session.skipped && now >= session.graceEndsAt && document.lock.autoLockOnTimeout) {
-            store.save(session.copy(pendingEntry = true))
+        if (session.active && session.pendingEntry && now - lastLaunch >= 30_000L) {
+            lastLaunch = now
             launch(context)
         }
     }
 
-    fun decide(context: Context, lock: Boolean) {
+    fun decide(context: Context, lock: Boolean, key: String, expires: Long) {
         val store = LockStore(context)
-        val session = store.session()
-        if (!session.active) return
-        store.save(session.copy(decided = false, skipped = !lock, pendingEntry = lock))
+        val now = System.currentTimeMillis()
+        if (expires <= now) return
+        var accepted = false
+        store.transition { old ->
+            accepted = LockStateMachine.valid(old, key, now) && old.endsAt == expires && !old.decided && !old.skipped
+            if (accepted) LockStateMachine.choose(old, key, now, lock) else old
+        }
+        if (!accepted) return
         if (!lock) runCatching { context.getSystemService(NotificationManager::class.java)?.cancel(DecisionNotificationId) }
         if (lock) launch(context)
     }
@@ -82,16 +86,17 @@ internal object GuardLockController {
     }
 
     /** Only a resumed Activity can acknowledge that the lock screen is actually visible. */
-    fun entered(context: Context): Boolean {
+    fun entered(context: Context, key: String): Boolean {
         val store = LockStore(context)
-        val session = store.session()
-        if (!session.active || session.skipped || session.endsAt <= System.currentTimeMillis()) return false
-        store.save(session.copy(decided = true, pendingEntry = false))
-        return true
+        val now = System.currentTimeMillis()
+        val next = store.transition { LockStateMachine.entered(it, key, now) }
+        return LockStateMachine.valid(next, key, now) && next.decided && !next.skipped
     }
 
     fun launch(context: Context) {
-        runCatching { context.startActivity(GuardLockActivity.intent(context)) }
+        val session = LockStore(context).session()
+        if (session.active && !session.skipped && session.endsAt > System.currentTimeMillis())
+            runCatching { context.startActivity(GuardLockActivity.intent(context, session.windowKey)) }
     }
 
     fun finishSession(context: Context) {
@@ -111,7 +116,7 @@ internal object GuardLockController {
             }
         )
         val open = PendingIntent.getActivity(
-            context, 7326, GuardLockActivity.intent(context),
+            context, 7326, GuardLockActivity.intent(context, "${window.ruleId}|${window.start}"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val builder = Notification.Builder(context, ChannelId)
@@ -129,18 +134,20 @@ internal object GuardLockController {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_REMINDER)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-        builder.addAction(action(context, "lock_start", "开始锁机", 7327))
-        builder.addAction(action(context, "lock_skip", "本次不锁", 7328))
+        builder.addAction(action(context, "lock_start", "开始锁机", 7327, window))
+        builder.addAction(action(context, "lock_skip", "本次不锁", 7328, window))
         runCatching { manager.notify(DecisionNotificationId, builder.build()) }
     }
 
-    private fun action(context: Context, action: String, title: String, request: Int): Notification.Action =
+    private fun action(context: Context, action: String, title: String, request: Int, window: ProtectionWindow): Notification.Action =
         Notification.Action.Builder(
             Icon.createWithResource(context, R.drawable.ic_snow_guard),
             title,
             PendingIntent.getService(
                 context, request,
-                Intent(context, GuardService::class.java).setAction(action),
+                Intent(context, GuardService::class.java).setAction(action)
+                    .setData(android.net.Uri.parse("shutup://lock/${window.ruleId}/${window.start}/$action"))
+                    .putExtra(WindowKey, "${window.ruleId}|${window.start}").putExtra(ExpiresAt, window.end),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
         ).build()

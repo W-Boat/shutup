@@ -29,8 +29,7 @@ class GuardLockAccessibilityService : AccessibilityService() {
         if (pkg in document.lock.allowedPackages) return
         runCatching {
             startActivity(
-                Intent(this, GuardLockActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                GuardLockActivity.intent(this, session.windowKey)
             )
         }
     }

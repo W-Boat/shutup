@@ -84,7 +84,7 @@ class GuardLockActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!GuardLockController.entered(this)) finishLock() else tryKiosk()
+        if (!GuardLockController.entered(this, intent.getStringExtra(GuardLockController.WindowKey).orEmpty())) finishLock() else tryKiosk()
     }
 
     private fun tryKiosk() {
@@ -106,10 +106,8 @@ class GuardLockActivity : ComponentActivity() {
         val document = kotlinx.coroutines.runBlocking { withContext(Dispatchers.IO) { GuardStore(this@GuardLockActivity).document.first() } }
         val quota = document.lock.safeQuota
         val session = lockStore.session()
-        if (lockStore.consumeExit(quota)) {
+        if (lockStore.exit(session.windowKey, System.currentTimeMillis(), quota)) {
             exiting = true
-            lockStore.markExited(session.windowKey)
-            lockStore.save(session.copy(active = false, decided = true, skipped = true))
             runCatching { stopLockTask() }
             Toast.makeText(this, "已使用一次退出机会，本月剩余 ${lockStore.exitsLeft(quota)} 次", Toast.LENGTH_LONG).show()
             finishAndRemoveTask()
@@ -143,8 +141,10 @@ class GuardLockActivity : ComponentActivity() {
     }
 
     companion object {
-        fun intent(context: Context): Intent =
+        fun intent(context: Context, key: String): Intent =
             Intent(context, GuardLockActivity::class.java)
+                .setData(android.net.Uri.parse("shutup://lock/entry/${android.net.Uri.encode(key)}"))
+                .putExtra(GuardLockController.WindowKey, key)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     }
 }
