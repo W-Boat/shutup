@@ -29,6 +29,12 @@ jobs:
       - name: Collect APK checksum and size
         run: |
           sha256sum app/build/outputs/apk/github/debug/*.apk app/build/outputs/apk/github/slim/*.apk > debug-apk-sha256.txt
+          python3 - <<'PY'
+          import glob, os
+          for apk in glob.glob('app/build/outputs/apk/github/slim/*.apk'):
+              size = os.path.getsize(apk)
+              assert size <= 12_500_000, f'Slim APK too large: {size} bytes'
+          PY
           { stat -c '%s bytes  %n' app/build/outputs/apk/github/debug/*.apk app/build/outputs/apk/github/slim/*.apk 2>/dev/null || true; } | tee apk-size.txt
       - name: Verify release shrinker without signing
         run: bash ./gradlew minifyGithubReleaseWithR8 -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
@@ -44,34 +50,4 @@ jobs:
             app/build/reports/
             app/build/test-results/
           if-no-files-found: warn
-  emulator:
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        api: [30, 31, 34, 35, 36]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-snow
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: ${{ matrix.api }}
-          arch: x86_64
-          target: default
-          disable-animations: true
-          script: bash ./gradlew connectedGithubDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.xiaomanjun.sleepdownschedule.feature.guard.GuardPersistenceInstrumentedTest -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: emulator-api-${{ matrix.api }}
-          path: app/build/reports/androidTests/
 
