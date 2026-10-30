@@ -35,7 +35,7 @@ object LockStateMachine {
 
     fun begin(previous: LockSession, candidate: LockSession, exited: Set<String>): LockSession = when {
         candidate.windowKey in exited -> previous.copy(active = false, pendingEntry = false)
-        previous.windowKey == candidate.windowKey -> previous
+        previous.active && previous.windowKey == candidate.windowKey -> previous
         else -> candidate
     }
 

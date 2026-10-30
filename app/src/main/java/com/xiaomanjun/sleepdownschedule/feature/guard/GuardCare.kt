@@ -181,6 +181,8 @@ internal object GuardCare {
     private fun blockedReason(manager: NotificationManager): String? = when {
         !manager.areNotificationsEnabled() -> "通知权限未开启，将在时段内最多尝试 3 次"
         manager.getNotificationChannel(ChannelId)?.importance == NotificationManager.IMPORTANCE_NONE -> "AI 关怀通知渠道已关闭"
+        manager.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_NONE ||
+            manager.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_ALARMS -> "系统勿扰仅允许闹钟或禁止全部通知，等待补发"
         manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL &&
             manager.getNotificationChannel(ChannelId)?.canBypassDnd() != true -> "系统勿扰正在拦截关怀通知，等待补发"
         else -> null

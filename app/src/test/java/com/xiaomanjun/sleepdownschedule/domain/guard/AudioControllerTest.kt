@@ -86,4 +86,39 @@ class AudioControllerTest {
         val retried = controller.reconcile(state, resolution(), speaker, {}) { fail(it) }
         assertEquals(0, audio.ringer); assertTrue(retried.ring!!.confirmed)
     }
+
+    @Test fun automaticBrightnessIsSnapshottedBeforeWriteAndRestored() {
+        var mode = 1; var level = 180
+        var saved = GuardRuntime()
+        val audio = object : FakeAudio() {
+            override fun brightness() = level
+            override fun brightnessMode() = mode
+            override fun setBrightnessMode(value: Int) {
+                assertNotNull(saved.brightnessMode)
+                mode = value
+            }
+            override fun setBrightness(value: Int) { level = value }
+        }
+        val controller = AudioController(audio)
+        controller.reconcile(saved, resolution(SoundPolicy(brightnessCap = 20)), speaker, { saved = it }) { fail(it) }
+        assertEquals(0, mode); assertEquals(51, level)
+        controller.reconcile(saved, resolution(null), speaker, { saved = it }) { fail(it) }
+        assertEquals(1, mode); assertEquals(180, level)
+        assertNull(saved.brightnessMode)
+    }
+
+    @Test fun manualBrightnessAndAutomaticModeChangesRemainUserOwned() {
+        var mode = 1; var level = 180
+        val audio = object : FakeAudio() {
+            override fun brightness() = level
+            override fun brightnessMode() = mode
+            override fun setBrightnessMode(value: Int) { mode = value }
+            override fun setBrightness(value: Int) { level = value }
+        }
+        val controller = AudioController(audio)
+        val state = controller.reconcile(GuardRuntime(), resolution(SoundPolicy(brightnessCap = 20)), speaker, {}) { fail(it) }
+        level = 90; mode = 1
+        controller.reconcile(state, resolution(null), speaker, {}) { fail(it) }
+        assertEquals(90, level); assertEquals(1, mode)
+    }
 }

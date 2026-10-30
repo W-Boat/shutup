@@ -54,6 +54,9 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
     val visualConfig = settingsVisualConfig(state.config)
     var document by remember { mutableStateOf<GuardDocument?>(null) }
     val status by GuardEngine.status.collectAsState()
+    val session by androidx.compose.runtime.produceState(lockStore.session()) {
+        while (true) { value = lockStore.session(); kotlinx.coroutines.delay(1_000) }
+    }
     var message by remember { mutableStateOf<String?>(null) }
     var showAllApps by remember { mutableStateOf(false) }
     var noteCourse by remember { mutableStateOf("") }
@@ -77,6 +80,13 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
             val doc = document
             GlassPreferenceSection("上课锁机") {
                 SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
+                    SettingsInfoRow("当前锁机状态", when {
+                        !session.active -> "未进入锁机时段"
+                        session.skipped -> "本次不锁机"
+                        session.decided -> "已锁定 · 页面已进入且系统锁任务已确认"
+                        session.pendingEntry -> "等待进入 · 系统尚未确认锁定，请从通知进入"
+                        else -> "等待决定 · ${session.courseName}"
+                    })
                     if (doc == null) {
                         SettingsValueRow("读取中", "正在载入锁机配置…", compact = true)
                     } else {
@@ -143,7 +153,7 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
                         }
                         SettingsActionRow(
                             title = "重置本月额度",
-                            subtitle = "手动恢复为购买时的 3 次（仅重置计数，不改变配置）",
+                            subtitle = "仅重置已使用次数，不改变每月额度设置",
                             buttonText = "重置",
                             backdrop = backdrop
                         ) { run { withContext(Dispatchers.IO) { lockStore.resetExits() }; message = "已重置本月退出次数" } }
@@ -152,7 +162,11 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
                             subtitle = "无障碍、使用情况、悬浮窗、精确闹钟等，逐项授权",
                             buttonText = "去授权",
                             backdrop = backdrop
-                        ) { message = "请返回保护页打开「权限管理」" }
+                        ) {
+                            context.startActivity(android.content.Intent(context, com.xiaomanjun.sleepdownschedule.SettingsDetailActivity::class.java)
+                                .putExtra(com.xiaomanjun.sleepdownschedule.app.ui.SettingsDetailPageExtra,
+                                    com.xiaomanjun.sleepdownschedule.feature.settings.SettingsPage.GuardPermissions.name))
+                        }
                     }
                 }
             }
