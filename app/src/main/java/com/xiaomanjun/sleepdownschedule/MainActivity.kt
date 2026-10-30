@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 )
-                com.xiaomanjun.sleepdownschedule.feature.guard.GuardFirstLaunchPrompt(firstFrameReady)
+                com.xiaomanjun.sleepdownschedule.feature.guard.GuardFirstLaunchPrompt(firstFrameReady, config)
             }
         }
     }
