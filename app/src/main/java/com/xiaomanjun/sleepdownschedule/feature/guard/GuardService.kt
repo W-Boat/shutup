@@ -474,7 +474,7 @@ class GuardService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        AndroidAudioBackend(this).abandonAudioFocus()
+        AndroidAudioBackend(this, enhanced = false).abandonAudioFocus()
         GuardEngine.running = false
         GuardEngine.status.value = GuardEngine.status.value.copy(serviceRunning = false, overlayActive = false)
         overlay.hide()
