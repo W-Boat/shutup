@@ -1,0 +1,3 @@
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="10dp">
+    <bitmap android:src="@drawable/ic_snow_leopard_flat" android:gravity="fill" />
+</inset>
