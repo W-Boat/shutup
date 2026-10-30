@@ -217,7 +217,6 @@ fun GuardSettingsScreen(
                                 title = "试一次提醒",
                                 subtitle = "立即弹出一条示例提醒，确认通知权限与声音策略",
                                 buttonText = "预览",
-                                iconRes = R.drawable.ic_snow_guard,
                                 backdrop = backdrop
                             ) { command("preview") }
                         }
@@ -255,7 +254,6 @@ fun GuardSettingsScreen(
                             title = "电池与自启动",
                             subtitle = "允许后台、忽略电池优化、允许自启动，可显著减少切到后台后保护失效",
                             buttonText = "去设置",
-                            iconRes = R.drawable.ic_snow_guard,
                             backdrop = backdrop
                         ) {
                             openSettings(context, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true) {
@@ -266,7 +264,6 @@ fun GuardSettingsScreen(
                             title = "修改系统设置",
                             subtitle = "亮度控制需要该权限；未授权时亮度上限不会生效",
                             buttonText = "授权",
-                            iconRes = R.drawable.ic_snow_guard,
                             backdrop = backdrop
                         ) {
                             openSettings(context, Settings.ACTION_MANAGE_WRITE_SETTINGS, true) {
@@ -308,7 +305,6 @@ fun GuardSettingsScreen(
                                 title = "Root 已授权",
                                 subtitle = "重新写入电池白名单并允许修改系统设置",
                                 buttonText = "重新同步",
-                                iconRes = R.drawable.ic_snow_guard,
                                 backdrop = backdrop
                             ) {
                                 run {
@@ -369,7 +365,6 @@ fun GuardSettingsScreen(
                                 title = "安排时段",
                                 subtitle = "固定时段、全天或跟随课表",
                                 buttonText = "新建规则",
-                                iconRes = R.drawable.ic_snow_guard,
                                 backdrop = backdrop
                             ) {
                                 editingRule = GuardRule(UUID.randomUUID().toString(), template.name, template.id, Trigger.WEEKLY)
@@ -453,7 +448,6 @@ fun GuardSettingsScreen(
                         title = "恢复导入前课表",
                         subtitle = "撤销最近一次覆盖导入，回到导入前的独立课表",
                         buttonText = "撤销",
-                        iconRes = R.drawable.ic_snow_guard,
                         backdrop = backdrop
                     ) {
                         run {
@@ -470,8 +464,8 @@ fun GuardSettingsScreen(
                     SettingsGroup(backdrop = backdrop, config = visualConfig, modifier = Modifier.fillMaxWidth()) {
                         AndroidAudioBackend(context, doc.enhanced, doc.rootMode).capabilities().items.forEach { capability ->
                             SettingsValueRow(
-                                (if (capability.available) "● " else "○ ") + capability.title,
-                                capability.detail,
+                                capability.title,
+                                "${if (capability.available) "可用" else "待授权或受限"} · ${capability.detail}",
                                 compact = true
                             )
                         }
@@ -602,7 +596,6 @@ internal fun TrustedDevicesSection(
                     title = "蓝牙权限",
                     subtitle = "读取已配对设备需要“附近的设备”权限",
                     buttonText = "授权",
-                    iconRes = R.drawable.ic_snow_guard,
                     backdrop = backdrop
                 ) { permissionLauncher.launch(arrayOf(Manifest.permission.BLUETOOTH_CONNECT)) }
             }
@@ -610,7 +603,6 @@ internal fun TrustedDevicesSection(
                 title = "已配对设备",
                 subtitle = if (paired.isEmpty()) "暂无可读取设备，先到系统蓝牙里配对" else "共 ${paired.size} 台，点按勾选可信输出",
                 buttonText = "刷新",
-                iconRes = R.drawable.ic_snow_guard,
                 backdrop = backdrop
             ) { refresh() }
             (paired + document.trustedDevices).distinctBy { it.address }.forEach { device ->

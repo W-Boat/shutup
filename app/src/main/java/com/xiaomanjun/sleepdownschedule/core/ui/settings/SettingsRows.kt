@@ -247,10 +247,11 @@ fun SettingsActionRow(
     title: String,
     subtitle: String,
     buttonText: String,
-    iconRes: Int,
+    iconRes: Int? = null,
     backdrop: Backdrop?,
     destructive: Boolean = false,
     badgeText: String? = null,
+    neutral: Boolean = false,
     onClick: () -> Unit
 ) {
     if (LocalGlassMiuixEnabled.current) {
@@ -262,7 +263,8 @@ fun SettingsActionRow(
                     backdrop = backdrop,
                     label = buttonText,
                     onClick = onClick,
-                    role = if (destructive) DialogButtonRole.Cancel else DialogButtonRole.Confirm,
+                    role = if (destructive) DialogButtonRole.Cancel else if (neutral) DialogButtonRole.Neutral else DialogButtonRole.Confirm,
+                    monochromeNeutral = neutral,
                     iconRes = iconRes,
                     destructiveFilled = destructive
                 )
@@ -273,8 +275,8 @@ fun SettingsActionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(76.dp)
-            .padding(horizontal = 20.dp),
+            .heightIn(min = 76.dp)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
@@ -291,7 +293,8 @@ fun SettingsActionRow(
             backdrop = backdrop,
             label = buttonText,
             onClick = onClick,
-            role = if (destructive) DialogButtonRole.Cancel else DialogButtonRole.Confirm,
+            role = if (destructive) DialogButtonRole.Cancel else if (neutral) DialogButtonRole.Neutral else DialogButtonRole.Confirm,
+            monochromeNeutral = neutral,
             iconRes = iconRes,
             destructiveFilled = destructive
         )
@@ -302,7 +305,7 @@ fun SettingsActionRow(
 fun SettingsValueRow(title: String, value: String, compact: Boolean = false) {
     if (compact && LocalGlassMiuixEnabled.current) {
         MiuixBasicComponent(title = title, summary = value, modifier = Modifier.fillMaxWidth(),
-            insideMargin = PaddingValues(horizontal = 4.dp, vertical = 8.dp))
+            insideMargin = PaddingValues(horizontal = 14.dp, vertical = 12.dp))
         return
     }
     if (compact) {

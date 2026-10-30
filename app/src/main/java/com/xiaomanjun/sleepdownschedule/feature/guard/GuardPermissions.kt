@@ -213,12 +213,11 @@ fun GuardPermissionsScreen(state: AppState, backdrop: Backdrop?) {
                     )
                     items.forEach { permission ->
                         SettingsActionRow(
-                            title = (if (permission.granted) "● " else "○ ") + permission.title,
+                            title = permission.title,
                             subtitle = permission.detail,
                             buttonText = if (permission.granted) "已授权" else permission.actionLabel,
-                            iconRes = R.drawable.ic_snow_guard,
                             backdrop = backdrop,
-                            badgeText = if (permission.granted) null else "待处理"
+                            neutral = permission.granted
                         ) {
                             when (permission.id) {
                                 "root" -> {

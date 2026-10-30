@@ -236,6 +236,18 @@ fun SettingsRootScreen(
                         onClick = { onPageChange(SettingsPage.Guard) }
                     )
                     SettingsNavigationRow(
+                        "上课锁机",
+                        subtitle = "决定时间、白名单与每月退出额度",
+                        selected = selectedPage == SettingsPage.GuardLock,
+                        onClick = { onPageChange(SettingsPage.GuardLock) }
+                    )
+                    SettingsNavigationRow(
+                        "权限管理",
+                        subtitle = "通知、声音保护与锁机所需权限",
+                        selected = selectedPage == SettingsPage.GuardPermissions,
+                        onClick = { onPageChange(SettingsPage.GuardPermissions) }
+                    )
+                    SettingsNavigationRow(
                         "通用设置",
                         leadingIcon = Icons.Rounded.Settings,
                         leadingIconTint = ComposeColor(0xFF0A84FF),

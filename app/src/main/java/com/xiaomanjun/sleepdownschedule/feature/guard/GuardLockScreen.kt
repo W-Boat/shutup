@@ -145,14 +145,12 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
                             title = "重置本月额度",
                             subtitle = "手动恢复为购买时的 3 次（仅重置计数，不改变配置）",
                             buttonText = "重置",
-                            iconRes = R.drawable.ic_snow_guard,
                             backdrop = backdrop
                         ) { run { withContext(Dispatchers.IO) { lockStore.resetExits() }; message = "已重置本月退出次数" } }
                         SettingsActionRow(
                             title = "锁机权限",
                             subtitle = "无障碍、使用情况、悬浮窗、精确闹钟等，逐项授权",
                             buttonText = "去授权",
-                            iconRes = R.drawable.ic_snow_guard,
                             backdrop = backdrop
                         ) { message = "请返回保护页打开「权限管理」" }
                     }
@@ -201,7 +199,6 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
                             title = if (showAllApps) "收起应用列表" else "选择应用",
                             subtitle = "读取已安装且可启动的应用",
                             buttonText = if (showAllApps) "收起" else "展开",
-                            iconRes = R.drawable.ic_snow_guard,
                             backdrop = backdrop
                         ) { showAllApps = !showAllApps }
                         if (showAllApps) {
