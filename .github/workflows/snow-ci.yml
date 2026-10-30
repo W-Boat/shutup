@@ -38,9 +38,10 @@ jobs:
         run: bash ./gradlew assembleGithubSlim -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
       - name: Collect APK checksum and size
         run: |
+          set -euo pipefail
           sha256sum app/build/outputs/apk/github/debug/*.apk app/build/outputs/apk/github/slim/*.apk > debug-apk-sha256.txt
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
-            bash scripts/verify-apk-signatures.sh app/build/outputs/apk/github/debug/*.apk app/build/outputs/apk/github/slim/*.apk > apk-signing.txt
+            bash scripts/verify-apk-signatures.sh app/build/outputs/apk/github/debug/*.apk app/build/outputs/apk/github/slim/*.apk | tee apk-signing.txt
           fi
           python3 - <<'PY'
           import glob, os

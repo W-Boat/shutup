@@ -6,9 +6,18 @@ signer=$(find "${ANDROID_HOME:?}/build-tools" -type f -name apksigner | sort -V 
 test -n "$signer" || { echo 'apksigner unavailable'; exit 1; }
 for apk in "$@"; do
   report="$RUNNER_TEMP/signature-$(basename "$apk").txt"
-  "$signer" verify --verbose --print-certs "$apk" > "$report"
-  actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$report" | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')
-  test "$actual" = "$expected" || { echo "Signing identity mismatch: $(basename "$apk")"; exit 1; }
+  if ! "$signer" verify --verbose --print-certs "$apk" > "$report" 2>&1; then
+    cat "$report"
+    exit 1
+  fi
   printf '%s\n' "$(basename "$apk")"
   cat "$report"
+  python3 - "$report" "$expected" <<'PY'
+import pathlib, re, sys
+report = pathlib.Path(sys.argv[1]).read_text()
+# New SDKs qualify signer labels by supported SDK range and may print the same identity twice.
+actual = set(s.lower() for s in re.findall(r'(?mi)^\s*Signer[^\n]*certificate SHA-256 digest:\s*([a-f0-9]{64})\b', report))
+if actual != {sys.argv[2]}:
+    raise SystemExit(f'Signing identity mismatch; observed certificate digests: {sorted(actual)}')
+PY
 done
