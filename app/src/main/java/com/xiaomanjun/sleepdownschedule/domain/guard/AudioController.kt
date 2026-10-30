@@ -13,6 +13,8 @@ interface AudioBackend {
     fun brightness(): Int = -1
     fun maximumBrightness(): Int = 255
     fun setBrightness(value: Int) { }
+    fun brightnessMode(): Int = -1
+    fun setBrightnessMode(value: Int) { }
     /** Preempt other media apps; called on every reconcile while protection is active. */
     fun takeAudioFocus() { }
     fun abandonAudioFocus() { }
@@ -87,6 +89,15 @@ class AudioController(private val backend: AudioBackend) {
             val current = backend.brightness()
             val owned = state.brightness
             if (cap != null && maximum > 0 && current >= 0) {
+                val mode = backend.brightnessMode()
+                val modeOwned = state.brightnessMode
+                if (mode >= 0 && (modeOwned == null || !modeOwned.confirmed || policy?.lockBrightness == true || changed)) {
+                    val record = OwnedVolume(modeOwned?.original ?: mode, 0)
+                    persist(state.copy(brightnessMode = record))
+                    if (mode != 0) backend.setBrightnessMode(0)
+                    check(backend.brightnessMode() == 0) { "无法关闭自动亮度，亮度限制未确认" }
+                    persist(state.copy(brightnessMode = record.copy(confirmed = true)))
+                }
                 val target = minOf(current, maximum * cap / 100)
                 val needsWrite = policy?.lockBrightness == true || owned == null || !owned.confirmed || changed
                 if (needsWrite && target >= 0) {
@@ -100,6 +111,10 @@ class AudioController(private val backend: AudioBackend) {
             } else if (owned != null && current >= 0) {
                 if (current == owned.applied) backend.setBrightness(owned.original)
                 persist(state.copy(brightness = null))
+            }
+            if (cap == null) state.brightnessMode?.let { record ->
+                if (backend.brightnessMode() == record.applied) backend.setBrightnessMode(record.original)
+                persist(state.copy(brightnessMode = null))
             }
         }
         attempt {

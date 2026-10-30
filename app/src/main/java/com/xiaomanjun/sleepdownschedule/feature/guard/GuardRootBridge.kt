@@ -73,8 +73,12 @@ internal object GuardRootBridge {
 
     fun setBrightness(context: Context, value: Int): Boolean {
         if (!isAuthorized(context)) return false
-        run("settings put system screen_brightness_mode 0")
         return run("settings put system screen_brightness ${value.coerceIn(0, 255)}")?.exitCode == 0
+    }
+
+    fun setBrightnessMode(context: Context, value: Int): Boolean {
+        if (!isAuthorized(context) || value !in 0..1) return false
+        return run("settings put system screen_brightness_mode $value")?.exitCode == 0
     }
 
     fun whitelistBattery(context: Context): Boolean {

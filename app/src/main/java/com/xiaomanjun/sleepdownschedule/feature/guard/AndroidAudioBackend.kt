@@ -105,10 +105,20 @@ internal class AndroidAudioBackend(
 
     override fun maximumBrightness(): Int = 255
 
+    override fun brightnessMode(): Int = Settings.System.getInt(context.contentResolver,
+        Settings.System.SCREEN_BRIGHTNESS_MODE, -1)
+
+    override fun setBrightnessMode(value: Int) {
+        require(value == Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL || value == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC)
+        if (Settings.System.canWrite(context)) {
+            check(Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, value)) { "自动亮度模式写入失败" }
+        } else check(rootMode && GuardRootBridge.setBrightnessMode(context, value)) { "自动亮度模式需要修改系统设置权限或 Root" }
+    }
+
     override fun setBrightness(value: Int) {
         val target = value.coerceIn(0, maximumBrightness())
         if (Settings.System.canWrite(context)) {
-            Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, target)
+            check(Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, target)) { "亮度写入失败" }
             return
         }
         if (rootMode && GuardRootBridge.setBrightness(context, target)) return

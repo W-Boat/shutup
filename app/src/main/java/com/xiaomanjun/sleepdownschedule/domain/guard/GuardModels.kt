@@ -207,6 +207,7 @@ object PolicyResolver {
     val ring: OwnedVolume? = null,
     val alarm: OwnedVolume? = null,
     val brightness: OwnedVolume? = null,
+    val brightnessMode: OwnedVolume? = null,
     val previousRoute: String? = null,
     val previousTrusted: Boolean = false,
     val policyKey: String? = null
