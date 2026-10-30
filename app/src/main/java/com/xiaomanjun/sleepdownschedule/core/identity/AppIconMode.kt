@@ -76,7 +76,9 @@ fun currentIconResId(
     context: Context,
     darkTheme: Boolean = AppIconManager.currentDarkTheme(context)
 ): Int {
-    return com.xiaomanjun.sleepdownschedule.R.drawable.ic_snow_launcher
+    // Compose painterResource cannot decode <bitmap>, <inset>, <layer-list> or adaptive XML.
+    // Keep the in-app entry point a direct raster; launcher layering has its own mipmap resource.
+    return com.xiaomanjun.sleepdownschedule.R.drawable.ic_snow_leopard_flat
 }
 
 /** Fixed full-color drawable aliases for SystemUI, sharing each explicit light/dark PNG. */
