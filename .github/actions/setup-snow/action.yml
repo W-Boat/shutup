@@ -15,7 +15,9 @@ runs:
     - uses: actions/setup-java@v6
       with:
         distribution: temurin
-        java-version: '17'
+        # Miuix's host JVM artifact uses Java 21; Robolectric renders its dialogs.
+        # The Android application continues to target Java 17 bytecode.
+        java-version: '21'
     - uses: android-actions/setup-android@v4
       with:
         packages: 'platform-tools'
