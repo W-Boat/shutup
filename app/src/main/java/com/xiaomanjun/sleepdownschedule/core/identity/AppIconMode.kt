@@ -127,10 +127,10 @@ object AppIconManager {
     fun currentStyle(context: Context): AppIconStyle {
         val stored = preferences(context).getString(
             StyleKey,
-            AppIconStyle.KANBAN.name
+            AppIconStyle.MINIMAL.name
         )
         return runCatching { AppIconStyle.valueOf(stored.orEmpty()) }
-            .getOrDefault(AppIconStyle.KANBAN)
+            .getOrDefault(AppIconStyle.MINIMAL)
     }
 
     fun backupPreferences(context: Context): AppIconPreferencesSnapshot {
@@ -227,7 +227,13 @@ object AppIconManager {
         } else {
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED
         }
-        if (packageManager.getComponentEnabledSetting(component) != desiredState) {
+        val actualEnabled = when (packageManager.getComponentEnabledSetting(component)) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT ->
+                packageManager.getActivityInfo(component, PackageManager.MATCH_DISABLED_COMPONENTS).enabled
+            else -> false
+        }
+        if (actualEnabled != enabled) {
             packageManager.setComponentEnabledSetting(
                 component,
                 desiredState,

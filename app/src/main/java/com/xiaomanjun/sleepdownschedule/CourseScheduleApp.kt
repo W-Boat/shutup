@@ -66,7 +66,8 @@ class CourseScheduleApp : Application() {
         AppMaterialPreferences.load(this)
         com.xiaomanjun.sleepdownschedule.feature.importing.chatgpt.ChatGptAuthManager.initialize(this)
         AppIconManager.onIconChanged = { TodayCoursesWidgetProvider.refreshAll(this) }
-        AppIconManager.applyStoredMode(this)
+        // Never disable the launcher component while the system is creating its first Activity.
+        // Stored icon changes are published by the process ON_STOP observer below.
         AutoRefreshScheduleWorker.ensureSchedule(this, AutoRefreshScheduleStore.load(this))
         com.xiaomanjun.sleepdownschedule.feature.backup.webdav.WebDavAutomation.schedule(this)
         SleepDownRemoteConfig.initialize(this, applicationScope)
