@@ -107,7 +107,7 @@ p=Path(os.environ['FIXTURE'])/'settings.json'; data=json.loads(p.read_text())
 if sys.argv[3]=='get': print(data[sys.argv[5]])
 else:
     if os.environ['FAIL_WRITE']=='1': sys.exit(1)
-    data[sys.argv[5]]=sys.argv[6]; p.write_text(json.dumps(data))
+    data[sys.argv[5]]=sys.argv[6]; data.setdefault('_writes',[]).append([sys.argv[5],sys.argv[6]]); p.write_text(json.dumps(data))
 ''')
         component = 'io.github.wboat.shutup/com.xiaomanjun.sleepdownschedule.feature.guard.GuardLockAccessibilityService'
         path = self.script('enable-accessibility.sh', dict(USER=10, COMPONENT=component))
@@ -130,6 +130,14 @@ else:
         result, state, component = self.accessibility('null')
         self.assertEqual(0, result.returncode)
         self.assertEqual(component, state['enabled_accessibility_services'])
+
+    def test_accessibility_restarts_only_own_stale_service(self):
+        component = 'io.github.wboat.shutup/com.xiaomanjun.sleepdownschedule.feature.guard.GuardLockAccessibilityService'
+        result, state, _ = self.accessibility('first.app/First:'+component+':last.app/Last')
+        self.assertEqual(0, result.returncode)
+        writes = [value for key,value in state['_writes'] if key=='enabled_accessibility_services']
+        self.assertEqual('first.app/First:last.app/Last', writes[0])
+        self.assertEqual('first.app/First:last.app/Last:'+component, writes[1])
 
     def test_accessibility_write_failure_is_not_reported_as_success(self):
         result, state, _ = self.accessibility('other.app/other.Service', fail=True)

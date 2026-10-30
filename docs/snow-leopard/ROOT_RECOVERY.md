@@ -18,7 +18,7 @@
 
 ## Root 无障碍
 
-- 使用系统 secure settings 为当前用户追加准确组件，保留已有服务、避免重复，再回读设置。当前用户来自 AOSP UID 分段，不调用隐藏 getIdentifier API。[UserHandle 源码](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/os/UserHandle.java)。
+- 使用系统 secure settings 为当前用户启用准确组件；尚未连接但已在设置列表内时，仅将本组件移除再追加以触发重新绑定，其他服务保留，避免重复并回读。当前用户来自 AOSP UID 分段，不调用隐藏 getIdentifier API。[UserHandle 源码](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/os/UserHandle.java)。
 - 区分设置已写入与 onServiceConnected 实际回调；等待最多 5 秒，未连接时提示在系统权限页检查。开启自动恢复后，仅前台恢复/保护服务配置载入时尝试恢复，未连接不伪报成功。关闭开关只停止自动恢复，不擅自撤销系统已有授权。
 
 ## 锁机测试

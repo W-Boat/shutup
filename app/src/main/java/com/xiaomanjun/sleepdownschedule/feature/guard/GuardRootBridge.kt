@@ -105,8 +105,9 @@ internal object GuardRootBridge {
     }
 
     /** Append our exact component; never replace another app's accessibility grants. */
-    fun enableLockAccessibility(context: Context): Boolean {
+    @Synchronized fun enableLockAccessibility(context: Context): Boolean {
         if (!isAuthorized(context)) return false
+        if (GuardLockAccessibilityService.connected) return true
         val user = android.os.Process.myUid() / 100_000
         val component = android.content.ComponentName(context, GuardLockAccessibilityService::class.java).flattenToString()
         require(component.matches(Regex("[A-Za-z0-9_./]+")))
