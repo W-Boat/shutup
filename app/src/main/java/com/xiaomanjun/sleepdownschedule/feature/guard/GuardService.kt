@@ -512,7 +512,7 @@ class GuardReceiver : BroadcastReceiver() {
                 withTimeout(8_000) {
                     GuardEngine.reconcile(context, true)
                     val doc = GuardStore(context).document.first()
-                    if (doc.rules.any { it.enabled } || doc.manualUntil > System.currentTimeMillis() ||
+                    if (doc.lock.enabled || doc.rules.any { it.enabled } || doc.manualUntil > System.currentTimeMillis() ||
                         GuardEngine.status.value.endAt != null) GuardEngine.start(context)
                 }
             } finally { pending.finish() }
