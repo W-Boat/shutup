@@ -153,6 +153,10 @@ internal object GuardEngine {
             windows.flatMap { listOf(it.classStart, it.classEnd,
                 minOf(it.classEnd, it.classStart + document.lock.safeGraceSeconds * 1000L)) }
                 .filter { it > now }.minOrNull()?.let { candidates += it }
+            if (document.lock.lockOnManualProtect && document.manualUntil > now) {
+                val deadline = document.manualUntil - 60 * 60_000L + document.lock.safeGraceSeconds * 1000L
+                if (deadline > now) candidates += deadline
+            }
         }
         if (document.care.enabled && careLead > 0) {
             windows.filter { it.isCourse }.map { it.classStart - careLead }.filter { it > now }.minOrNull()?.let { candidates += it }
