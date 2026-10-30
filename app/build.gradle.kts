@@ -116,6 +116,7 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
+                storeType = "PKCS12"
                 storeFile = file(requireNotNull(releaseStoreFilePath))
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
@@ -135,6 +136,7 @@ android {
             buildConfigField("boolean", "GLASS_FIXED_MORPH", "false")
         }
         getByName("debug") {
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             buildConfigField("boolean", "SLEEPDOWN_LOCAL_EDU_TEST", (eduAdapterTestAssets != null).toString())
             if (eduAdapterTestAssets != null) versionNameSuffix = "-edu-test"
             buildConfigField("boolean", "GLASS_FIXED_MORPH", providers.gradleProperty("sleepdown.glassFixedMorph").getOrElse("false").toBoolean().toString())
@@ -165,8 +167,8 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
-        // Shippable artifact for CI: R8 + resource shrinking like release, signed with the debug
-        // key so GitHub Actions can always produce an installable APK without release secrets.
+        // Trusted CI loads the fixed project signing key for debug, slim and release alike.
+        // PRs use temporary debug signing only for build checks; their APKs are never delivered.
         create("slim") {
             initWith(getByName("release"))
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")

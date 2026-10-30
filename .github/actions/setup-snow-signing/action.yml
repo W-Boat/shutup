@@ -1,0 +1,27 @@
+name: Load fixed ShutUp signing identity
+description: Import the existing project key from Secrets; never generate or rotate keys in CI
+inputs:
+  keystore-base64:
+    required: true
+    description: Encrypted PKCS12 keystore encoded as base64
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        SIGNING_KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
+      run: |
+        set -euo pipefail
+        for name in SIGNING_KEYSTORE_BASE64 SNOW_RELEASE_STORE_PASSWORD SNOW_RELEASE_KEY_ALIAS SNOW_RELEASE_KEY_PASSWORD SNOW_SIGNING_CERT_SHA256; do
+          test -n "${!name:-}" || { echo "Missing fixed-signing configuration: $name"; exit 1; }
+        done
+        umask 077
+        store="$RUNNER_TEMP/shutup-fixed-signing.p12"
+        printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$store"
+        keytool -exportcert -keystore "$store" -storetype PKCS12 -storepass:env SNOW_RELEASE_STORE_PASSWORD -alias "$SNOW_RELEASE_KEY_ALIAS" > "$RUNNER_TEMP/shutup-signing-certificate.der"
+        actual=$(sha256sum "$RUNNER_TEMP/shutup-signing-certificate.der" | cut -d' ' -f1)
+        expected=$(printf '%s' "$SNOW_SIGNING_CERT_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')
+        pinned=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/signing-certificate.sha256")
+        test "$actual" = "$pinned" || { echo 'Keystore differs from the certificate pinned in source'; exit 1; }
+        test "$actual" = "$expected" || { echo 'Signing certificate changed; refusing to package'; exit 1; }
+        printf 'SNOW_RELEASE_STORE_FILE=%s\n' "$store" >> "$GITHUB_ENV"

@@ -13,22 +13,35 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      SNOW_RELEASE_STORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.SNOW_RELEASE_STORE_PASSWORD || '' }}
+      SNOW_RELEASE_KEY_ALIAS: ${{ github.event_name != 'pull_request' && secrets.SNOW_RELEASE_KEY_ALIAS || '' }}
+      SNOW_RELEASE_KEY_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.SNOW_RELEASE_KEY_PASSWORD || '' }}
+      SNOW_SIGNING_CERT_SHA256: ${{ github.event_name != 'pull_request' && secrets.SNOW_SIGNING_CERT_SHA256 || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-snow
+      - name: Load fixed project signing key
+        if: github.event_name != 'pull_request'
+        uses: ./.github/actions/setup-snow-signing
+        with:
+          keystore-base64: ${{ secrets.SNOW_KEYSTORE_BASE64 }}
       - name: Unit tests
         shell: bash
         run: |
           bash ./gradlew testGithubDebugUnitTest --tests '*domain.guard.*' --tests '*feature.guard.*' --tests '*ScheduleTermBoundaryTest' --tests '*ScheduleAdjustmentsTest' --tests '*IcsScheduleCodecTest' --tests '*WakeUpImportSessionTest' --tests '*ScheduleImportCustomCourseTest' -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
       - name: Lint and installable debug APK
         run: bash ./gradlew lintGithubDebug assembleGithubDebug -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
-      - name: Shippable shrunk APK (debug-signed)
+      - name: Shippable shrunk APK (fixed project signature)
         run: bash ./gradlew assembleGithubSlim -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
       - name: Collect APK checksum and size
         run: |
           sha256sum app/build/outputs/apk/github/debug/*.apk app/build/outputs/apk/github/slim/*.apk > debug-apk-sha256.txt
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            bash scripts/verify-apk-signatures.sh app/build/outputs/apk/github/debug/*.apk app/build/outputs/apk/github/slim/*.apk > apk-signing.txt
+          fi
           python3 - <<'PY'
           import glob, os
           for apk in glob.glob('app/build/outputs/apk/github/slim/*.apk'):
@@ -39,7 +52,7 @@ jobs:
       - name: Verify release shrinker without signing
         run: bash ./gradlew minifyGithubReleaseWithR8 -Psleepdown.miuixSourcePath="$GITHUB_WORKSPACE/.ci/miuix" -Psleepdown.useMavenMirrors=false --no-daemon --max-workers=2 --stacktrace
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         with:
           name: snow-leopard-debug-and-reports
           path: |
@@ -47,7 +60,19 @@ jobs:
             app/build/outputs/apk/github/slim/*.apk
             debug-apk-sha256.txt
             apk-size.txt
+            apk-signing.txt
             app/build/reports/
             app/build/test-results/
           if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name == 'pull_request'
+        with:
+          name: snow-leopard-pr-reports-only
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          if-no-files-found: warn
+      - name: Remove private signing files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/shutup-fixed-signing.p12" "$RUNNER_TEMP/shutup-signing-certificate.der"
 
