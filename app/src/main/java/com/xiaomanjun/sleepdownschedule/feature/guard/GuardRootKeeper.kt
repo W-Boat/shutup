@@ -12,7 +12,14 @@ internal object GuardRootKeeper {
     private fun runtime() = "/data/local/tmp/shutup-root-${Process.myUid()}"
     private fun quote(value: String) = "'" + value.replace("'", "'\\''") + "'"
 
-    fun heartbeat(context: Context) { beat(context).writeText((System.currentTimeMillis() / 1000).toString()) }
+    @Synchronized fun heartbeat(context: Context) {
+        val file = android.util.AtomicFile(beat(context))
+        val output = file.startWrite()
+        try {
+            output.write((System.currentTimeMillis() / 1000).toString().toByteArray())
+            file.finishWrite(output)
+        } catch (e: Exception) { file.failWrite(output); throw e }
+    }
 
     @Synchronized fun stopLocal(context: Context) {
         val enabled = flag(context)

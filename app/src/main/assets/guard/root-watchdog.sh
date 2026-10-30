@@ -9,7 +9,7 @@ service=__SERVICE__
 mkdir "$runtime/running" 2>/dev/null || exit 0
 echo $$ > "$runtime/pid"
 trap 'rm -f "$runtime/pid"; rmdir "$runtime/running" 2>/dev/null' EXIT
-trap 'exit 0' TERM INT HUP
+trap 'exit 0' TERM INT
 attempts=0
 echo watching > "$runtime/status"
 while [ -f "$enabled" ]; do
