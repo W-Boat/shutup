@@ -382,7 +382,7 @@ class GuardService : Service() {
         super.onTaskRemoved(rootIntent)
         // Swiping the task away must not end the protection: wake ourselves again in 2s.
         val doc = document
-        val busy = doc != null && (doc.rules.any { it.enabled } || doc.manualUntil > System.currentTimeMillis())
+        val busy = doc != null && (doc.lock.enabled || doc.rules.any { it.enabled } || doc.manualUntil > System.currentTimeMillis())
         if (busy) GuardEngine.scheduleRestart(this)
         GuardEngine.refreshTiles(this)
     }
