@@ -148,8 +148,21 @@ internal object GuardEngine {
         val lead = document.preReminderSeconds * 1000L
         if (lead > 0) windows.asSequence().map { it.start - lead }.filter { it > now }.minOrNull()?.let { candidates += it }
         val careLead = document.care.safeLeadMinutes * 60_000L
+        if (document.lock.enabled) {
+            windows.flatMap { listOf(it.classStart, it.classEnd,
+                minOf(it.classEnd, it.classStart + document.lock.safeGraceSeconds * 1000L)) }
+                .filter { it > now }.minOrNull()?.let { candidates += it }
+        }
         if (document.care.enabled && careLead > 0) {
-            windows.asSequence().map { it.start - careLead }.filter { it > now }.minOrNull()?.let { candidates += it }
+            windows.filter { it.isCourse }.map { it.classStart - careLead }.filter { it > now }.minOrNull()?.let { candidates += it }
+        }
+        if (document.care.enabled && document.care.duringClass) {
+            val every = document.care.safeEveryMinutes * 60_000L
+            windows.filter { it.isCourse && it.classEnd > now }.forEach { window ->
+                val bucket = maxOf(1L, (now - window.classStart) / every + 1)
+                val at = window.classStart + bucket * every
+                if (at > now && at < window.classEnd) candidates += at
+            }
         }
         return candidates.minOrNull() ?: Long.MAX_VALUE
     }

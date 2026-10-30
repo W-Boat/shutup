@@ -46,21 +46,21 @@ internal object GuardCare {
         if (!care.enabled) return
         val prefs = context.getSharedPreferences(Prefs, Context.MODE_PRIVATE)
         val lead = care.safeLeadMinutes * 60_000L
-        val upcoming = windows.filter { it.start > now && it.start - now <= lead }.minByOrNull { it.start }
+        val upcoming = windows.filter { it.isCourse && it.classStart > now && it.classStart - now <= lead }.minByOrNull { it.classStart }
         if (upcoming != null && matches(care.onlyCourseNames, upcoming.reason)) {
-            val key = "before:${upcoming.ruleId}|${upcoming.start}"
+            val key = "before:${upcoming.classKey}"
             if (!prefs.getBoolean(key, false)) {
                 prefs.edit().putBoolean(key, true).apply()
-                val minutes = ((upcoming.start - now) / 60_000L).coerceAtLeast(1)
+                val minutes = ((upcoming.classStart - now) / 60_000L).coerceAtLeast(1)
                 scope.launch { post(context, care.style, document, upcoming.reason, "before", "还有 $minutes 分钟上课", now) }
             }
         }
-        val inside = windows.filter { it.contains(now) }.maxByOrNull { it.end }
+        val inside = windows.filter { it.isCourse && it.inClass(now) }.maxByOrNull { it.classEnd }
         if (care.duringClass && inside != null && matches(care.onlyCourseNames, inside.reason)) {
             val every = care.safeEveryMinutes * 60_000L
-            val bucket = (now - inside.start) / every
+            val bucket = (now - inside.classStart) / every
             if (bucket >= 1) {
-                val key = "during:${inside.ruleId}|${inside.start}|$bucket"
+                val key = "during:${inside.classKey}|$bucket"
                 if (!prefs.getBoolean(key, false)) {
                     prefs.edit().putBoolean(key, true).apply()
                     scope.launch { post(context, care.style, document, inside.reason, "during", "${inside.reason} 进行中", now) }

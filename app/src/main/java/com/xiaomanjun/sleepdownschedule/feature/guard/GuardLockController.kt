@@ -33,12 +33,12 @@ internal object GuardLockController {
             finishSession(context)
             return
         }
-        val active = windows.filter { it.contains(now) }.maxByOrNull { it.end }
+        val active = windows.filter { it.inClass(now) }.maxByOrNull { it.classEnd }
         if (active == null) {
             finishSession(context)
             return
         }
-        val key = "${active.ruleId}|${active.start}"
+        val key = active.classKey
         var created = false
         val session = store.transition { old ->
             val next = LockStateMachine.begin(old,
@@ -47,9 +47,9 @@ internal object GuardLockController {
                     windowKey = key,
                     courseName = active.reason,
                     reason = active.reason,
-                    endsAt = active.end,
+                    endsAt = active.classEnd,
                     startedAt = now,
-                    graceEndsAt = now + document.lock.safeGraceSeconds * 1000L,
+                    graceEndsAt = minOf(active.classEnd, active.classStart + document.lock.safeGraceSeconds * 1000L),
                     decided = false,
                     skipped = false
                 ), store.exitedWindows())
@@ -116,7 +116,7 @@ internal object GuardLockController {
             }
         )
         val open = PendingIntent.getActivity(
-            context, 7326, GuardLockActivity.intent(context, "${window.ruleId}|${window.start}"),
+            context, 7326, GuardLockActivity.intent(context, window.classKey),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val builder = Notification.Builder(context, ChannelId)
@@ -146,8 +146,8 @@ internal object GuardLockController {
             PendingIntent.getService(
                 context, request,
                 Intent(context, GuardService::class.java).setAction(action)
-                    .setData(android.net.Uri.parse("shutup://lock/${window.ruleId}/${window.start}/$action"))
-                    .putExtra(WindowKey, "${window.ruleId}|${window.start}").putExtra(ExpiresAt, window.end),
+                    .setData(android.net.Uri.parse("shutup://lock/${window.ruleId}/${window.classStart}/$action"))
+                    .putExtra(WindowKey, window.classKey).putExtra(ExpiresAt, window.classEnd),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
         ).build()

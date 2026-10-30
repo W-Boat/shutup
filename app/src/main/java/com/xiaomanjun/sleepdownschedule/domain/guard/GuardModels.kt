@@ -120,8 +120,11 @@ data class GuardDocument(
 }
 
 data class LessonOccurrence(val scheduleId: Int, val name: String, val start: Long, val end: Long)
-data class ProtectionWindow(val ruleId: String, val reason: String, val templateId: String, val start: Long, val end: Long) {
+data class ProtectionWindow(val ruleId: String, val reason: String, val templateId: String, val start: Long, val end: Long,
+    val classStart: Long = start, val classEnd: Long = end, val isCourse: Boolean = false) {
     fun contains(now: Long) = now >= start && now < end
+    fun inClass(now: Long) = now >= classStart && now < classEnd
+    val classKey: String get() = "$ruleId|$classStart"
 }
 
 /** Compile wall-clock schedules in the current zone; never use fixed 24h arithmetic across DST. */
@@ -136,7 +139,8 @@ object RuleCompiler {
             if (rule.trigger == Trigger.COURSES) {
                 lessons.filter { it.scheduleId == rule.scheduleId && valid(Instant.ofEpochMilli(it.start).atZone(zone).toLocalDate()) }
                     .map { ProtectionWindow(rule.id, it.name, rule.templateId,
-                        it.start - rule.leadMinutes * 60_000L, it.end + rule.tailMinutes * 60_000L) }
+                        it.start - rule.leadMinutes * 60_000L, it.end + rule.tailMinutes * 60_000L,
+                        it.start, it.end, true) }
             } else dates.filter { it.dayOfWeek.value in rule.weekdays && valid(it) }.map { date ->
                 val allDay = rule.trigger == Trigger.ALL_DAY
                 val start = if (allDay) date.atStartOfDay(zone) else date.atTime(LocalTime.parse(rule.start)).atZone(zone)
@@ -147,7 +151,8 @@ object RuleCompiler {
                 }
                 ProtectionWindow(rule.id, rule.name, rule.templateId,
                     start.toInstant().toEpochMilli() - if (allDay) 0 else rule.leadMinutes * 60_000L,
-                    end.toInstant().toEpochMilli() + if (allDay) 0 else rule.tailMinutes * 60_000L)
+                    end.toInstant().toEpochMilli() + if (allDay) 0 else rule.tailMinutes * 60_000L,
+                    start.toInstant().toEpochMilli(), end.toInstant().toEpochMilli())
             }
         }.filter { it.end > it.start }.sortedBy { it.start }
     }
