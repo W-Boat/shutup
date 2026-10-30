@@ -54,8 +54,13 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
     val visualConfig = settingsVisualConfig(state.config)
     var document by remember { mutableStateOf<GuardDocument?>(null) }
     val status by GuardEngine.status.collectAsState()
-    val session by androidx.compose.runtime.produceState(lockStore.session()) {
-        while (true) { value = lockStore.session(); kotlinx.coroutines.delay(1_000) }
+    val session by androidx.compose.runtime.produceState(com.xiaomanjun.sleepdownschedule.domain.guard.LockSession()) {
+        while (true) {
+            value = lockStore.session().let {
+                if (it.endsAt <= System.currentTimeMillis()) it.copy(active = false) else it
+            }
+            kotlinx.coroutines.delay(1_000)
+        }
     }
     var message by remember { mutableStateOf<String?>(null) }
     var showAllApps by remember { mutableStateOf(false) }
@@ -87,6 +92,10 @@ fun GuardLockScreen(state: AppState, backdrop: Backdrop?) {
                         session.pendingEntry -> "等待进入 · 系统尚未确认锁定，请从通知进入"
                         else -> "等待决定 · ${session.courseName}"
                     })
+                    if (session.active && !session.skipped && !session.decided) {
+                        SettingsActionRow("进入本次锁机", "通知关闭或后台启动受限时，可从这里进入并确认系统锁任务",
+                            "进入", backdrop = backdrop) { GuardLockController.launch(context) }
+                    }
                     if (doc == null) {
                         SettingsValueRow("读取中", "正在载入锁机配置…", compact = true)
                     } else {

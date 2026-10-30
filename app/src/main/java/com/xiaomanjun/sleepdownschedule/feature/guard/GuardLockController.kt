@@ -57,7 +57,7 @@ internal object GuardLockController {
                     decided = false,
                     skipped = false
                 ), store.exitedWindows())
-            created = next.windowKey != old.windowKey
+            created = next.windowKey != old.windowKey || (!old.active && next.active)
             val checked = if (next.decided && context.getSystemService(android.app.ActivityManager::class.java)?.lockTaskModeState == android.app.ActivityManager.LOCK_TASK_MODE_NONE)
                 next.copy(decided = false, pendingEntry = true) else next
             LockStateMachine.timeout(checked, now, document.lock.autoLockOnTimeout).also {
