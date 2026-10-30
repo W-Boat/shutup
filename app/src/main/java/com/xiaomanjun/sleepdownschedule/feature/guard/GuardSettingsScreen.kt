@@ -521,7 +521,7 @@ fun GuardSettingsScreen(
                         val parsed = parseGuardEvent(event.message)
                         SettingsInfoRow(
                             title = "${clock(event.time)} · ${event.title.ifBlank { parsed.title }}",
-                            body = parsed.detail,
+                            body = if (event.title.isNotBlank()) listOf(event.reason, event.error).filter { it.isNotBlank() }.joinToString("\n") else parsed.detail,
                             badgeText = parsed.badge
                         )
                     }

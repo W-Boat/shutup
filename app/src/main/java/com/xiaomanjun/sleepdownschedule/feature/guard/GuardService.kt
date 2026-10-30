@@ -104,7 +104,7 @@ internal object GuardEngine {
                 resolved.nextChange ?: Long.MAX_VALUE,
                 Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
             )
-            val reminderAt = reminderTarget(document, now)
+            val reminderAt = reminderTarget(context, document, now)
             schedule(context, minOf(boundary, reminderAt))
             maybeRemind(context, document, now)
             GuardLockController.tick(context, document, windows, now)
@@ -144,7 +144,7 @@ internal object GuardEngine {
         }
     }
 
-    private fun reminderTarget(document: GuardDocument, now: Long): Long {
+    private fun reminderTarget(context: Context, document: GuardDocument, now: Long): Long {
         val candidates = mutableListOf<Long>()
         val lead = document.preReminderSeconds * 1000L
         if (lead > 0) windows.asSequence().map { it.start - lead }.filter { it > now }.minOrNull()?.let { candidates += it }
@@ -165,6 +165,7 @@ internal object GuardEngine {
                 if (at > now && at < window.classEnd) candidates += at
             }
         }
+        if (document.care.enabled) candidates += GuardCare.nextRetryAt(context, now)
         return candidates.minOrNull() ?: Long.MAX_VALUE
     }
 
