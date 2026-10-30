@@ -124,6 +124,14 @@ class GuardLockActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val key = intent.getStringExtra(GuardLockController.WindowKey).orEmpty()
+        if (com.xiaomanjun.sleepdownschedule.domain.guard.LockStateMachine.valid(lockStore.session(), key, System.currentTimeMillis())) {
+            setIntent(intent)
+        }
+    }
+
     private fun openAllowedApp(packageName: String) {
         val mode = getSystemService(ActivityManager::class.java)?.lockTaskModeState
         val permitted = getSystemService(DevicePolicyManager::class.java)?.isLockTaskPermitted(packageName) == true
@@ -175,7 +183,7 @@ class GuardLockActivity : ComponentActivity() {
 
     private fun bringBack() {
         val manager = getSystemService(ActivityManager::class.java) ?: return
-        manager.appTasks.firstOrNull()?.moveToFront()
+        runCatching { manager.appTasks.firstOrNull { it.taskInfo.taskId == taskId }?.moveToFront() }
     }
 
     companion object {
@@ -183,7 +191,7 @@ class GuardLockActivity : ComponentActivity() {
             Intent(context, GuardLockActivity::class.java)
                 .setData(android.net.Uri.parse("shutup://lock/entry/${android.net.Uri.encode(key)}"))
                 .putExtra(GuardLockController.WindowKey, key)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     }
 }
 

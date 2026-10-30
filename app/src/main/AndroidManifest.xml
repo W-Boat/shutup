@@ -112,6 +112,7 @@
         <activity
             android:name=".feature.guard.GuardLockActivity"
             android:exported="false"
+            android:taskAffinity="${applicationId}.lock"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:theme="@style/AppTheme" />

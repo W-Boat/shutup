@@ -29,11 +29,14 @@ internal object GuardLockController {
 
     fun tick(context: Context, document: GuardDocument, windows: List<ProtectionWindow>, now: Long) {
         val store = LockStore(context)
-        if (!document.lock.enabled) {
+        if (!document.lock.enabled || document.bypassUntil > now || document.skipUntil > now) {
             finishSession(context)
             return
         }
-        val active = windows.filter { it.inClass(now) }.maxByOrNull { it.classEnd }
+        val manual = if (document.lock.lockOnManualProtect && document.manualUntil > now)
+            ProtectionWindow("manual", "手动保护", document.selectedTemplateId.orEmpty(),
+                document.manualUntil - 60 * 60_000L, document.manualUntil) else null
+        val active = (windows + listOfNotNull(manual)).filter { it.inClass(now) }.maxByOrNull { it.classEnd }
         if (active == null) {
             finishSession(context)
             return
@@ -55,12 +58,14 @@ internal object GuardLockController {
                     skipped = false
                 ), store.exitedWindows())
             created = next.windowKey != old.windowKey
-            LockStateMachine.timeout(next, now, document.lock.autoLockOnTimeout).also {
+            val checked = if (next.decided && context.getSystemService(android.app.ActivityManager::class.java)?.lockTaskModeState == android.app.ActivityManager.LOCK_TASK_MODE_NONE)
+                next.copy(decided = false, pendingEntry = true) else next
+            LockStateMachine.timeout(checked, now, document.lock.autoLockOnTimeout).also {
                 requestEntry = it.pendingEntry && !old.pendingEntry
             }
         }
-        if (created) {
-            notifyDecision(context, active, document.lock.safeGraceSeconds)
+        if (created || requestEntry) {
+            notifyDecision(context, active, document.lock.safeGraceSeconds, session.pendingEntry)
         }
         if (session.active && requestEntry && now - lastLaunch >= 30_000L) {
             lastLaunch = now
@@ -107,7 +112,7 @@ internal object GuardLockController {
         runCatching { context.getSystemService(NotificationManager::class.java)?.cancel(DecisionNotificationId) }
     }
 
-    private fun notifyDecision(context: Context, window: ProtectionWindow, graceSeconds: Int) {
+    private fun notifyDecision(context: Context, window: ProtectionWindow, graceSeconds: Int, pending: Boolean = false) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
             NotificationChannel(ChannelId, "上课锁机", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -124,8 +129,8 @@ internal object GuardLockController {
         )
         val builder = Notification.Builder(context, ChannelId)
             .setSmallIcon(R.drawable.ic_snow_guard)
-            .setContentTitle("${window.reason} 已开始")
-            .setContentText("${graceSeconds / 60} 分钟内可以决定是否锁机，超时自动进入锁机")
+            .setContentTitle("${window.reason} · ${if (pending) "等待进入锁机" else "决定是否锁机"}")
+            .setContentText(if (pending) "尚未确认锁定，点此进入；后台拉起可能受系统限制" else "${graceSeconds} 秒内可以决定是否锁机")
             .setStyle(
                 Notification.BigTextStyle().bigText(
                     "${window.reason} 已经开始。\n现在进入锁机可以把注意力留在这一节；\n" +
