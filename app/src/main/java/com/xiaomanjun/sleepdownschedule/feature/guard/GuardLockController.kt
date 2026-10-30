@@ -156,7 +156,7 @@ internal object GuardLockController {
             PendingIntent.getService(
                 context, request,
                 Intent(context, GuardService::class.java).setAction(action)
-                    .setData(android.net.Uri.parse("shutup://lock/${window.ruleId}/${window.classStart}/$action"))
+                    .setData(android.net.Uri.parse("shutup://lock/action/${android.net.Uri.encode(window.classKey)}/$action"))
                     .putExtra(WindowKey, window.classKey).putExtra(ExpiresAt, window.classEnd),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )

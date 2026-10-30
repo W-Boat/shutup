@@ -18,6 +18,8 @@ class LockCourseScopeTest {
         assertFalse(LockCourseScope.allows(settings, math.copy(courseKey = "2:10")))
         assertFalse(LockCourseScope.allows(settings, math.copy(courseKey = "1:11")))
         assertFalse(LockCourseScope.allows(settings, math.copy(courseKey = null)))
+        assertNotEquals(math.classKey, math.copy(courseKey = "2:10").classKey)
+        assertEquals(math.classKey, math.copy(ruleId = "another-audio-rule").classKey)
     }
     @Test fun fixedAndManualWindowsKeepTheirOwnSemantics() {
         assertTrue(LockCourseScope.allows(LockSettings(courseAllowlist = listOf("missing")), math.copy(isCourse = false)))

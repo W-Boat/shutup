@@ -125,7 +125,7 @@ data class ProtectionWindow(val ruleId: String, val reason: String, val template
     val courseKey: String? = null) {
     fun contains(now: Long) = now >= start && now < end
     fun inClass(now: Long) = now >= classStart && now < classEnd
-    val classKey: String get() = "$ruleId|$classStart"
+    val classKey: String get() = if (isCourse && courseKey != null) "course:$courseKey|$classStart" else "$ruleId|$classStart"
 }
 
 /** Compile wall-clock schedules in the current zone; never use fixed 24h arithmetic across DST. */
