@@ -115,7 +115,7 @@ import java.util.UUID
             }
         }
         BasicComponent(title = "闹钟也静音（会影响提醒）", endActions = { Switch(checked = policy.alarms == AlarmPolicy.MUTE, onCheckedChange = { policy = policy.copy(alarms = if (it) AlarmPolicy.MUTE else AlarmPolicy.KEEP) }) })
-        BasicComponent(title = "抢占音频焦点", endActions = { Switch(checked = policy.focusTakeover, onCheckedChange = { policy = policy.copy(focusTakeover = it) }) })
+        BasicComponent(title = "抢占音频焦点", summary = "获准后播放零 PCM 静音音频维持活动；可能增加耗电，不能阻止忽略焦点的播放器", endActions = { Switch(checked = policy.focusTakeover, onCheckedChange = { policy = policy.copy(focusTakeover = it) }) })
         BasicComponent(title = "限制屏幕亮度", endActions = { Switch(checked = policy.brightnessCap != null, onCheckedChange = { policy = policy.copy(brightnessCap = if (it) 40 else null) }) })
         policy.brightnessCap?.let { percent ->
             Text("亮度上限 $percent%（5—100%，只降不升）")

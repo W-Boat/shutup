@@ -197,7 +197,7 @@ internal object GuardEngine {
             }
             if (policy.alarms == AlarmPolicy.MUTE) add("闹钟静音")
             if (policy.pausePlayback) add("尝试暂停播放")
-            if (policy.focusTakeover) add("已抢占音频焦点")
+            if (policy.focusTakeover) add(if (FocusHolder.granted) "音频焦点已获准 · 静音保活" else "音频焦点待获准")
         }
         return parts.joinToString(" · ").ifBlank { "保护中" }
     }
@@ -474,6 +474,7 @@ class GuardService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        AndroidAudioBackend(this).abandonAudioFocus()
         GuardEngine.running = false
         GuardEngine.status.value = GuardEngine.status.value.copy(serviceRunning = false, overlayActive = false)
         overlay.hide()

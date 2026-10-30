@@ -126,7 +126,16 @@ internal class AndroidAudioBackend(
     }
 
     override fun takeAudioFocus() {
-        // Focus must survive backend re-creation: one request per process, released explicitly.
+        if (FocusHolder.granted) {
+            FocusHolder.startSilence()
+            return
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - FocusHolder.lastAttempt < 10_000L) {
+            check(FocusHolder.granted) { "音频焦点未获准，继续依靠媒体限音保护" }
+            return
+        }
+        FocusHolder.lastAttempt = now
         val request = FocusHolder.request ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -135,13 +144,19 @@ internal class AndroidAudioBackend(
                     .build()
             )
             .setWillPauseWhenDucked(false)
-            .setOnAudioFocusChangeListener { }
+            .setOnAudioFocusChangeListener { change ->
+                FocusHolder.granted = change == AudioManager.AUDIOFOCUS_GAIN
+                if (!FocusHolder.granted) FocusHolder.stopSilence()
+            }
             .build()
             .also { FocusHolder.request = it }
         FocusHolder.granted = audio.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        check(FocusHolder.granted) { "系统拒绝音频焦点，继续依靠媒体限音保护" }
+        FocusHolder.startSilence()
     }
 
     override fun abandonAudioFocus() {
+        FocusHolder.stopSilence()
         FocusHolder.request?.let { audio.abandonAudioFocusRequest(it) }
         FocusHolder.request = null
         FocusHolder.granted = false
@@ -152,7 +167,7 @@ internal class AndroidAudioBackend(
         Capability("铃声／通知", requireNotNull(context.getSystemService(NotificationManager::class.java)).isNotificationPolicyAccessGranted,
             "使用系统铃声模式，通知通常联动；图书馆模板关闭铃声震动，不控制第三方自行触发的触觉反馈"),
         Capability("暂停播放", context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context), "仅控制提供媒体会话的播放器，不保证拦截播放开头"),
-        Capability("音频焦点抢占", true, "保护期间持续持有媒体焦点，其他应用获得焦点时会被本应用打断"),
+        Capability("音频焦点抢占", FocusHolder.granted, "${if (FocusHolder.granted) "已获准" else "尚未获准"}；配合零 PCM 静音播放维持音频活动，忽略焦点的应用仍由媒体限音保护"),
         Capability("亮度控制", Settings.System.canWrite(context) || (rootMode && GuardRootBridge.isAuthorized(context)),
             if (Settings.System.canWrite(context)) "已授予修改系统设置权限" else "需要“修改系统设置”权限，或开启 Root 模式"),
         Capability("精确触发", Build.VERSION.SDK_INT < 31 || requireNotNull(context.getSystemService(AlarmManager::class.java)).canScheduleExactAlarms(), "未授权时采用非精确闹钟，可能延迟"),
@@ -168,6 +183,33 @@ internal class AndroidAudioBackend(
 internal object FocusHolder {
     @Volatile var request: AudioFocusRequest? = null
     @Volatile var granted: Boolean = false
+    @Volatile var lastAttempt: Long = -10_000L
+    private var silentTrack: android.media.AudioTrack? = null
+
+    @Synchronized fun startSilence() {
+        if (silentTrack != null) return
+        val frames = 8_000
+        val track = android.media.AudioTrack.Builder()
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+            .setAudioFormat(android.media.AudioFormat.Builder().setSampleRate(frames)
+                .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO)
+                .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT).build())
+            .setTransferMode(android.media.AudioTrack.MODE_STATIC).setBufferSizeInBytes(frames * 2).build()
+        try {
+            val silence = ShortArray(frames)
+            check(track.write(silence, 0, frames) == frames) { "静音音频缓冲写入失败" }
+            check(track.setLoopPoints(0, frames, -1) == android.media.AudioTrack.SUCCESS)
+            track.setVolume(0f)
+            track.play()
+            silentTrack = track
+        } catch (e: Exception) { track.release(); throw e }
+    }
+
+    @Synchronized fun stopSilence() {
+        silentTrack?.let { runCatching { it.stop() }; it.release() }
+        silentTrack = null
+    }
 }
 
 internal fun currentOutput(context: Context, document: GuardDocument): RouteEvidence {
